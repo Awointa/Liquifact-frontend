@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import Button from "./Button";
 import { copy } from "../app/copy/en";
 import { useWallet, WALLET_STATES, truncateAddress } from "./WalletProvider";
@@ -137,14 +137,15 @@ export default function WalletStatus() {
   const toast = useToast();
 
   /**
-   * Derive the Button props from the current wallet state.
-   *
-   * `buttonVariant` maps directly to <Button variant={...}>.
-   * The `loading` prop is derived separately: it is true only while connecting
-   * so Button renders its own Spinner and sets aria-busy automatically.
-   * No inline spinner SVG is needed here.
+   * Memoize the derived button/helper config so it is only recomputed when
+   * the wallet state, walletData, or error actually change.  Unrelated parent
+   * re-renders that leave these three values unchanged will reuse the same
+   * config object reference, preventing unnecessary child re-renders.
    */
-  const config = getStateConfig(state, walletData, error);
+  const config = useMemo(
+    () => getStateConfig(state, walletData, error),
+    [state, walletData, error]
+  );
 
   // Track state transitions to announce them once via the polite live region.
   const prevStateRef = useRef(state);
@@ -168,7 +169,11 @@ export default function WalletStatus() {
     }
   }, [state]);
 
-  const handleCopyAddress = async () => {
+  /**
+   * Memoize the copy-address handler so it is referentially stable across
+   * re-renders where walletData and toast have not changed.
+   */
+  const handleCopyAddress = useCallback(async () => {
     if (!walletData?.address) return;
     try {
       await copyToClipboard(walletData.address);
@@ -176,9 +181,14 @@ export default function WalletStatus() {
     } catch {
       toast.error(copy.wallet.toastCopyErrorMsg, copy.wallet.toastCopyErrorTitle);
     }
-  };
+  }, [walletData, toast]);
 
-  const handleClick = () => {
+  /**
+   * Memoize the action button handler.  Depends only on the wallet state
+   * primitives (state, connect, disconnect) so it stays stable whenever
+   * unrelated parts of the tree re-render.
+   */
+  const handleClick = useCallback(() => {
     switch (state) {
       case WALLET_STATES.DISCONNECTED:
       case WALLET_STATES.ERROR:
@@ -208,7 +218,7 @@ export default function WalletStatus() {
       default:
         break;
     }
-  };
+  }, [state, connect, disconnect]);
 
   // The #wallet-helper-text span is only present when showAddress is false.
   // aria-describedby must only reference an element that exists in the DOM —
