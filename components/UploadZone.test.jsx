@@ -596,7 +596,182 @@ describe("UploadZone", () => {
     });
   });
 
-  describe("GROUP 4: Accessibility", () => {
+  describe("GROUP 4: Reset / Upload another invoice flow", () => {
+    it("shows 'Upload another invoice' button in success state", async () => {
+      mockFetchOk();
+      render(<UploadZone />);
+
+      const file = createMockFile();
+      fireEvent.change(screen.getByLabelText(/select pdf invoice file/i), {
+        target: { files: [file] },
+      });
+      fireEvent.click(screen.getByRole("button", { name: /upload & tokenize invoice/i }));
+
+      await act(async () => {
+        await Promise.resolve();
+        jest.runAllTimers();
+      });
+
+      await waitFor(() =>
+        expect(screen.getByRole("status")).toHaveTextContent(copy.uploadZone.statusSuccess)
+      );
+
+      expect(
+        screen.getByRole("button", { name: copy.uploadZone.resetAriaLabel })
+      ).toBeInTheDocument();
+    });
+
+    it("clears file, error, and status back to idle after reset", async () => {
+      mockFetchOk();
+      render(<UploadZone />);
+
+      const file = createMockFile();
+      fireEvent.change(screen.getByLabelText(/select pdf invoice file/i), {
+        target: { files: [file] },
+      });
+      fireEvent.click(screen.getByRole("button", { name: /upload & tokenize invoice/i }));
+
+      await act(async () => {
+        await Promise.resolve();
+        jest.runAllTimers();
+      });
+
+      await waitFor(() =>
+        expect(screen.getByRole("status")).toHaveTextContent(copy.uploadZone.statusSuccess)
+      );
+
+      // Click the "Upload another invoice" reset button
+      fireEvent.click(screen.getByRole("button", { name: copy.uploadZone.resetAriaLabel }));
+
+      // Success status message should be gone
+      expect(screen.queryByRole("status")).not.toBeInTheDocument();
+
+      // The file name should no longer be displayed
+      expect(screen.queryByText("invoice.pdf")).not.toBeInTheDocument();
+
+      // The submit button should be disabled again (no file selected)
+      expect(screen.getByRole("button", { name: /upload & tokenize invoice/i })).toBeDisabled();
+
+      // The dropzone should show the idle prompt
+      expect(screen.getByText(copy.uploadZone.dragDropPrompt)).toBeInTheDocument();
+    });
+
+    it("reset clears stale error", async () => {
+      render(<UploadZone />);
+
+      // Trigger an error first
+      const file = createMockTextFile();
+      const input = screen.getByLabelText(/select pdf invoice file/i);
+      fireEvent.change(input, { target: { files: [file] } });
+
+      expect(screen.getByRole("alert")).toHaveTextContent(/invalid file type/i);
+
+      // Reach success state, then reset should clear everything
+      mockFetchOk();
+      const validFile = createMockFile();
+      fireEvent.change(input, { target: { files: [validFile] } });
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole("button", { name: /upload & tokenize invoice/i }));
+
+      await act(async () => {
+        await Promise.resolve();
+        jest.runAllTimers();
+      });
+
+      await waitFor(() =>
+        expect(screen.getByRole("status")).toHaveTextContent(copy.uploadZone.statusSuccess)
+      );
+
+      // Click reset
+      fireEvent.click(screen.getByRole("button", { name: copy.uploadZone.resetAriaLabel }));
+
+      // No error should be present
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+
+      // Now select an invalid file to ensure errors still work after reset
+      fireEvent.change(input, { target: { files: [file] } });
+      expect(screen.getByRole("alert")).toHaveTextContent(/invalid file type/i);
+    });
+
+    it("re-upload after reset works correctly", async () => {
+      mockFetchOk();
+      render(<UploadZone />);
+
+      // First upload cycle
+      const file = createMockFile();
+      const input = screen.getByLabelText(/select pdf invoice file/i);
+      fireEvent.change(input, { target: { files: [file] } });
+      fireEvent.click(screen.getByRole("button", { name: /upload & tokenize invoice/i }));
+
+      await act(async () => {
+        await Promise.resolve();
+        jest.runAllTimers();
+      });
+
+      await waitFor(() =>
+        expect(screen.getByRole("status")).toHaveTextContent(copy.uploadZone.statusSuccess)
+      );
+
+      // Reset
+      fireEvent.click(screen.getByRole("button", { name: copy.uploadZone.resetAriaLabel }));
+
+      // Verify idle state restored
+      expect(screen.queryByRole("status")).not.toBeInTheDocument();
+
+      // Select another file and submit again using the same fetch mock
+      // (mockFetchOk is NOT called again so the call counter is preserved)
+      const file2 = createMockFile("invoice2.pdf");
+      fireEvent.change(input, { target: { files: [file2] } });
+
+      expect(screen.getByText("invoice2.pdf")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /upload & tokenize invoice/i })).toBeEnabled();
+
+      fireEvent.click(screen.getByRole("button", { name: /upload & tokenize invoice/i }));
+
+      await act(async () => {
+        await Promise.resolve();
+        jest.runAllTimers();
+      });
+
+      await waitFor(() =>
+        expect(screen.getByRole("status")).toHaveTextContent(copy.uploadZone.statusSuccess)
+      );
+
+      // Verify the second upload completed
+      expect(global.fetch).toHaveBeenCalledTimes(2);
+    });
+
+    it("focuses the dropzone after reset", async () => {
+      mockFetchOk();
+      render(<UploadZone />);
+
+      const file = createMockFile();
+      fireEvent.change(screen.getByLabelText(/select pdf invoice file/i), {
+        target: { files: [file] },
+      });
+      fireEvent.click(screen.getByRole("button", { name: /upload & tokenize invoice/i }));
+
+      await act(async () => {
+        await Promise.resolve();
+        jest.runAllTimers();
+      });
+
+      await waitFor(() =>
+        expect(screen.getByRole("status")).toHaveTextContent(copy.uploadZone.statusSuccess)
+      );
+
+      const dropzone = screen.getByRole("button", { name: copy.uploadZone.dropZoneLabel });
+
+      // Click the "Upload another invoice" reset button
+      fireEvent.click(screen.getByRole("button", { name: copy.uploadZone.resetAriaLabel }));
+
+      // After reset, focus should be on the dropzone
+      expect(document.activeElement).toBe(dropzone);
+    });
+  });
+
+  describe("GROUP 5: Accessibility", () => {
     // Extended timeout thresholds to isolate sequential execution threads
     it("passes axe accessibility check in idle state", async () => {
       const { container } = render(<UploadZone />);

@@ -98,10 +98,29 @@ function Spinner({ className = "" }) {
  */
 function UploadZone({ onUploadSuccess, progress }) {
   const inputRef = useRef(null);
+  const dropzoneRef = useRef(null);
   const [dragOver, setDragOver] = useState(false);
   const [file, setFile] = useState(null);
   const [error, setError] = useState(null);
   const [status, setStatus] = useState("idle");
+
+  /**
+   * Resets the component back to its idle state, clearing the selected file,
+   * any error message, and the current status. Focus is moved to the dropzone
+   * so keyboard users can immediately start a fresh upload without having to
+   * tab back to it manually.
+   */
+  function resetUpload() {
+    setFile(null);
+    setError(null);
+    setStatus("idle");
+    if (inputRef.current) {
+      inputRef.current.value = "";
+    }
+    // Move focus to the dropzone after reset so keyboard-assisted users can
+    // immediately start a new upload without re-navigating.
+    dropzoneRef.current?.focus();
+  }
 
   function validate(f) {
     if (!f) return copy.uploadZone.errorNoFile;
@@ -172,7 +191,9 @@ function UploadZone({ onUploadSuccess, progress }) {
 
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        throw new Error(data.message || copy.uploadZone.errorUploadStatus.replace("{status}", res.status));
+        throw new Error(
+          data.message || copy.uploadZone.errorUploadStatus.replace("{status}", res.status)
+        );
       }
 
       setStatus("tokenizing");
@@ -232,6 +253,7 @@ function UploadZone({ onUploadSuccess, progress }) {
         onChange={handleChange}
       />
       <div
+        ref={dropzoneRef}
         role="button"
         tabIndex={0}
         aria-label={copy.uploadZone.dropZoneLabel}
@@ -332,14 +354,24 @@ function UploadZone({ onUploadSuccess, progress }) {
       )}
 
       {status === "success" && (
-        <p
-          role="status"
-          aria-live="polite"
-          className="mt-3 flex items-start gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-400"
-        >
-          <span aria-hidden="true">{"\u{1F680}"}</span>
-          {copy.uploadZone.statusSuccess}
-        </p>
+        <div className="mt-3 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-3">
+          <p
+            role="status"
+            aria-live="polite"
+            className="flex items-start gap-2 text-sm text-emerald-400"
+          >
+            <span aria-hidden="true">{"\u{1F680}"}</span>
+            {copy.uploadZone.statusSuccess}
+          </p>
+          <button
+            type="button"
+            onClick={resetUpload}
+            className="mt-3 w-full rounded-xl bg-emerald-600 py-2.5 text-sm font-semibold text-white transition-all duration-200 hover:bg-emerald-500 focus-ring"
+            aria-label={copy.uploadZone.resetAriaLabel}
+          >
+            {copy.uploadZone.resetAction}
+          </button>
+        </div>
       )}
 
       <button

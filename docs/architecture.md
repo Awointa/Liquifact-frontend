@@ -117,3 +117,81 @@ import from `@/components/WalletProvider`.
 - Environment config is read through `lib/config/env.js` (only `NEXT_PUBLIC_*`).
 - Tests: Jest for units/components (`*.test.jsx?`), Playwright for e2e under
   `tests/` (see [`../TESTING.md`](../TESTING.md)).
+
+---
+
+## Repository hygiene (Issue #453)
+
+This is a **JavaScript/TypeScript frontend** only. The repo must never contain
+Rust build tooling or Soroban contract files — those live in the separate
+`Liquifact-contracts` repository.
+
+### What does not belong here
+
+| Category | Examples | Action |
+| -------- | -------- | ------ |
+| Rust manifests | `Cargo.toml`, `Cargo.lock` | Delete — `.gitignore` blocks re-addition |
+| Rust source / WASM | `*.rs`, `*.wasm`, `src/*.rs`, `contracts/` | Delete — `.gitignore` blocks re-addition |
+| Binary installers | `rustup-init.exe`, `*.exe`, `*.so`, `*.dylib` | Delete — `.gitignore` blocks re-addition |
+| Transient PR bodies | `PR_BODY_*.md`, `PR_DESCRIPTION*.md` | Delete — `.gitignore` blocks re-addition |
+| One-off implementation notes | `ISSUE_*_IMPLEMENTATION.md`, `*_REFACTOR_SUMMARY.md`, `DELIVERY_CHECKLIST.md` | Archive useful content to `docs/` then delete — `.gitignore` blocks re-addition |
+
+### What lives in `docs/`
+
+All permanent reference material for this frontend belongs in `docs/`:
+
+| File | Purpose |
+| ---- | ------- |
+| `docs/architecture.md` | This file — routes, data flow, state, conventions |
+| `docs/api-integration.md` | HTTP payload / endpoint contract with the Express backend |
+| `docs/configuration.md` | Every `NEXT_PUBLIC_*` env variable, validation rules, defaults |
+| `docs/design-tokens.md` | CSS custom properties, Tailwind token mapping |
+| `docs/accessibility.md` | Accessibility statement and WCAG notes |
+| `docs/wallet-developer-guide.md` | Stellar / Freighter integration guide |
+| `docs/observability.md` | `reportError` sink and pluggable observability |
+| `docs/performance.md` | Bundle-size targets and code-splitting notes |
+| `docs/security.md` | CSP policy rationale and threat model |
+| `docs/getting-started.md` | Onboarding walkthrough for new contributors |
+| `docs/issue-334-cpu-budget-median-throttling.md` | Archived: CPU budget fix for median price oracle (contracts context) |
+| `docs/issue-334-flow-diagram.md` | Archived: Flow diagram for Issue #334 buffer truncation |
+
+### `.gitignore` guard rails
+
+The `.gitignore` was extended (Issue #453) with two labelled sections:
+
+```
+# ── Repo hygiene: block Rust/binary artifacts ──────────────────────────────
+Cargo.toml
+Cargo.lock
+*.exe  *.wasm  *.so  *.dylib
+rustup-init*
+/src/*.rs  /contracts/  /examples/*.rs  /test_snapshots/
+
+# ── Repo hygiene: block generated PR-body / one-off note files ──────────────
+PR_BODY_*.md
+PR_DESCRIPTION*.md
+ISSUE_*_IMPLEMENTATION.md
+ISSUE_*_FLOW_DIAGRAM.md
+DELIVERY_CHECKLIST.md
+*_REFACTOR_SUMMARY.md
+REFACTORING_*.md
+*_IMPLEMENTATION_SUMMARY.md
+*_INTEGRATION_SUMMARY.md
+IMPLEMENTATION_COMPLETE.md
+*_QUICK_REFERENCE.md
+LEDGER_GAP_TESTS.md
+```
+
+### Hygiene tests
+
+`tests/lint/repo-hygiene.test.tsx` (Jest, `node` environment) asserts the above
+rules on every CI run. It checks:
+
+1. Named Rust artefacts and directories are absent.
+2. Named transient note / PR-body files are absent.
+3. `.gitignore` contains every required pattern.
+4. Archived notes exist in `docs/`.
+5. Core frontend files (`package.json`, `next.config.mjs`, `app/layout.js`, …)
+   are still present after cleanup.
+6. Helper predicate functions (`isPrBodyFile`, `isTransientNote`, `isRustSource`,
+   `isBinary`) behave correctly.

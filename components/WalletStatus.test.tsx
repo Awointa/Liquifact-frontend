@@ -26,15 +26,13 @@ function renderWithProviders(ui: React.ReactElement) {
  * Render WalletStatus with a fixed wallet context value, bypassing the real
  * WalletProvider connect/disconnect flow so we can assert per-state rendering.
  */
-function renderWithState(
-  state: string,
-  overrides: Record<string, unknown> = {}
-) {
+function renderWithState(state: string, overrides: Record<string, unknown> = {}) {
   const contextValue = {
     state,
-    walletData: state === WALLET_STATES.CONNECTED
-      ? { address: "GABC...XYZ123", network: "testnet", balance: "1,234.56 XLM" }
-      : null,
+    walletData:
+      state === WALLET_STATES.CONNECTED
+        ? { address: "GABC...XYZ123", network: "testnet", balance: "1,234.56 XLM" }
+        : null,
     error: null,
     connect: jest.fn(),
     disconnect: jest.fn(),
@@ -115,7 +113,11 @@ describe("WalletStatus Button variant + loading — per WALLET_STATE", () => {
    * WalletStatus renders exactly one <button>.
    */
   function getWalletButton() {
-    return screen.getByRole("button");
+    const buttons = screen.getAllByRole("button");
+    const actionButton = buttons.find(
+      (btn) => btn.getAttribute("aria-label") !== "Copy wallet address"
+    );
+    return actionButton || buttons[0];
   }
 
   describe("DISCONNECTED", () => {

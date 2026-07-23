@@ -402,6 +402,88 @@ describe("InvestMarketplace", () => {
     );
   });
 
+  // ── Pagination + filter/search reset tests ────────────────────────────────
+
+  it("resets visible items to PAGE_SIZE when a currency filter is applied", async () => {
+    // Build 25 invoices: 15 USD, 10 EUR.
+    const invoices = [
+      ...Array.from({ length: 15 }, (_, i) => ({
+        id: `usd-${i + 1}`,
+        issuer: `USD Issuer ${i + 1}`,
+        amount: "1,000",
+        currency: "USD",
+        dueDate: "2026-12-31",
+        yield: "5.0%",
+        status: "Open",
+      })),
+      ...Array.from({ length: 10 }, (_, i) => ({
+        id: `eur-${i + 1}`,
+        issuer: `EUR Issuer ${i + 1}`,
+        amount: "1,000",
+        currency: "EUR",
+        dueDate: "2026-12-31",
+        yield: "5.0%",
+        status: "Open",
+      })),
+    ];
+
+    render(<InvestMarketplace loadInvoices={createDeferredLoader(invoices, 50)} />);
+    await flushTimers(50);
+
+    // Initially PAGE_SIZE items visible (10 USD entries)
+    expect(getInvoiceListItems()).toHaveLength(PAGE_SIZE);
+
+    // Load more once to see 20 items
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /load more invoices/i }));
+      jest.advanceTimersByTime(0);
+      await Promise.resolve();
+    });
+    expect(getInvoiceListItems()).toHaveLength(20);
+
+    // Apply EUR filter — should reset to PAGE_SIZE (only 10 EUR exist, so 10 visible)
+    fireEvent.click(screen.getByLabelText("Filter by EUR"));
+
+    expect(getInvoiceListItems()).toHaveLength(10);
+    expect(screen.queryByRole("button", { name: /load more invoices/i })).not.toBeInTheDocument();
+  });
+
+  it("resets visible items to PAGE_SIZE when search is applied after debounce", async () => {
+    const total = PAGE_SIZE * 3; // 30 invoices
+    const invoices = Array.from({ length: total }, (_, i) => ({
+      id: `inv-${String(i + 1).padStart(3, "0")}`,
+      issuer: i < 5 ? `SearchTarget Corp` : `Other Issuer ${i + 1}`,
+      amount: "1,000",
+      currency: "USD",
+      dueDate: "2026-12-31",
+      yield: "5.0%",
+      status: "Open",
+    }));
+
+    render(<InvestMarketplace loadInvoices={createDeferredLoader(invoices, 50)} />);
+    await flushTimers(50);
+
+    expect(getInvoiceListItems()).toHaveLength(PAGE_SIZE);
+
+    // Load more to get 20 items visible
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /load more invoices/i }));
+      jest.advanceTimersByTime(0);
+      await Promise.resolve();
+    });
+    expect(getInvoiceListItems()).toHaveLength(20);
+
+    // Type a search query and let debounce resolve
+    fireEvent.change(screen.getByLabelText("Search by issuer name"), {
+      target: { value: "SearchTarget" },
+    });
+    await flushTimers(SEARCH_DEBOUNCE_MS);
+
+    // Paging should reset: only 5 matching items, all visible (< PAGE_SIZE)
+    expect(getInvoiceListItems()).toHaveLength(5);
+    expect(screen.queryByRole("button", { name: /load more invoices/i })).not.toBeInTheDocument();
+  });
+
   // ── Filter tests ──────────────────────────────────────────────────────────
 
   it("filters invoices by currency", async () => {

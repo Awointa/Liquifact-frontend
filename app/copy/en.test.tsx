@@ -99,6 +99,7 @@ describe("copy dictionary — key presence", () => {
       expect(copy.wallet.retryButton).toBeDefined();
       expect(copy.wallet.switchNetworkButton).toBeDefined();
       expect(copy.wallet.installWalletButton).toBeDefined();
+      expect(copy.wallet.copyAddressButton).toBeDefined();
       expect(copy.wallet.helperDisconnected).toBeDefined();
       expect(copy.wallet.helperConnecting).toBeDefined();
       expect(copy.wallet.helperConnected).toBeDefined();
@@ -106,6 +107,10 @@ describe("copy dictionary — key presence", () => {
       expect(copy.wallet.helperWrongNetwork).toBeDefined();
       expect(copy.wallet.helperNoWallet).toBeDefined();
       expect(copy.wallet.installWalletUrl).toBeDefined();
+      expect(copy.wallet.toastCopySuccessTitle).toBeDefined();
+      expect(copy.wallet.toastCopySuccessMsg).toBeDefined();
+      expect(copy.wallet.toastCopyErrorTitle).toBeDefined();
+      expect(copy.wallet.toastCopyErrorMsg).toBeDefined();
       expect(copy.wallet.announceConnected).toBeDefined();
       expect(copy.wallet.announceDisconnected).toBeDefined();
       expect(copy.wallet.announceError).toBeDefined();
@@ -174,13 +179,11 @@ describe("copy dictionary — template placeholder consistency", () => {
       "5 investable invoices loaded"
     );
     expect(
-      copy.invest.announceFilteredCount
-        .replace("{matched}", "3")
-        .replace("{total}", "10")
+      copy.invest.announceFilteredCount.replace("{matched}", "3").replace("{total}", "10")
     ).toBe("3 of 10 invoices match");
-    expect(
-      copy.invest.announceShowing.replace("{shown}", "5").replace("{total}", "20")
-    ).toBe("Showing 5 of 20 investable invoices");
+    expect(copy.invest.announceShowing.replace("{shown}", "5").replace("{total}", "20")).toBe(
+      "Showing 5 of 20 investable invoices"
+    );
   });
 
   it("uploadZone error templates use {type}, {sizeMb}, {maxSizeMb}, {status} placeholders", () => {

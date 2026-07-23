@@ -35,6 +35,51 @@ a consistent, high‑contrast focus indicator.
   - WCAG AA contrast verification in `app/globals.contrast-ratio.test.tsx`
   - Keyboard traversal test (Tab order) using `@testing-library/user-event`
 
+### Roving Tabindex for Filter Chips (issue #466)
+
+The marketplace currency filter chips (`components/InvoiceFilters.jsx`) implement a **roving tabindex** pattern conforming to the [ARIA Authoring Practices Guide (APG) toolbar pattern](https://www.w3.org/WAI/ARIA/apg/patterns/toolbar/).
+
+**Pattern overview:**
+
+- The currency chip group is wrapped in a `role="toolbar"` container with an `aria-label="Currency filter"` accessible name.
+- Only **one chip** has `tabindex="0"` at any time (the currently focusable chip); all others have `tabindex="-1"`.
+- The toolbar becomes a single keyboard tab stop, reducing the number of Tab key presses needed to navigate the page.
+
+**Keyboard shortcuts:**
+
+| Key          | Action                                                           |
+| ------------ | ---------------------------------------------------------------- |
+| **Tab**      | Moves focus into (or out of) the toolbar as a single tab stop    |
+| **ArrowRight** | Moves focus to the next chip; wraps from last to first         |
+| **ArrowLeft**  | Moves focus to the previous chip; wraps from first to last     |
+| **Home**     | Moves focus to the first chip (USD)                              |
+| **End**      | Moves focus to the last chip (CHF)                               |
+| **Enter** or **Space** | Toggles the currency filter on/off (native button behavior) |
+
+**Behavior:**
+
+- Focus is set programmatically via `.focus()` on keyboard navigation.
+- Mouse clicks update the roving tabindex so the clicked chip becomes the `tabindex="0"` element.
+- Each chip retains `aria-pressed` to communicate its on/off state to assistive technologies.
+- The `.focus-ring` utility class provides a consistent, high-contrast focus indicator.
+
+**Accessibility rationale:**
+
+- Reduces the number of tab stops on the page, improving keyboard navigation efficiency.
+- Provides clear focus feedback via the `.focus-ring` class.
+- Arrow-key navigation aligns with user expectations for horizontal toolbars.
+- Wrap-around navigation ensures no dead-ends at either end of the chip list.
+
+**Test coverage:**
+
+- `components/InvoiceFilters.roving.test.tsx` — comprehensive roving tabindex tests covering:
+  - toolbar role and accessible name
+  - initial `tabindex="0"` assignment
+  - all four arrow/Home/End key bindings
+  - wrap-around behavior at both ends
+  - `aria-pressed` correctness across keyboard and mouse interactions
+  - focus-ring class presence (compatible with `focus-ring.a11y.test.tsx`)
+
 ### Pagination Announcements (issue #276)
 
 `components/Pagination.jsx` announces page position to screen readers when the caller
@@ -65,6 +110,99 @@ is not rendered and the two live regions never compete or produce duplicate outp
 
 Callers that adopt page-based mode should ensure they do not additionally wrap
 `Pagination` in another live region for the same paging event.
+
+### Keyboard Shortcut Help (issue #464)
+
+`components/ShortcutHelpDialog.jsx` is a discoverable, accessible modal dialog that
+lists every keyboard shortcut the LiquiFact frontend advertises. It is mounted near
+the root of the application (`app/layout.js`) so the dialog is reachable from any
+page.
+
+#### Opening the dialog
+
+Press **`?`** (`Shift+/"`) from anywhere on a page to open the dialog. The shortcut
+is intentionally ignored when focus is inside an `input`, a `textarea`, or any
+`contenteditable` element so typing in those controls is never intercepted.
+Modifer combinations such as `Ctrl+/`, `Meta+/`, or `Alt+/` are also ignored to
+preserve browser-default behaviour.
+
+#### Currently registered shortcuts
+
+| Shortcut key | Action                                     | Scope    | Wired in                              |
+| ------------ | ------------------------------------------ | -------- | ------------------------------------- |
+| `/`          | Focus the marketplace search input         | Global   | `components/InvoiceSearch.jsx`        |
+| `?`          | Open the keyboard shortcut help dialog     | Global   | `components/ShortcutHelpDialog.jsx`   |
+
+The dialog renders directly from the `KEYBOARD_SHORTCUTS` array exported by
+`lib/shortcuts.js`, so adding a new shortcut to the registry automatically
+surfaces it in the dialog — no changes to `ShortcutHelpDialog.jsx` are required.
+
+#### Shared registry
+
+`lib/shortcuts.js` is the single source of truth for keyboard shortcuts and the
+matcher logic that decides whether a `keydown` event should fire a shortcut. It
+exports:
+
+- `KEYBOARD_SHORTCUTS` — the list of advertised shortcuts consumed by the dialog.
+- `SEARCH_SHORTCUT_KEY`, `HELP_SHORTCUT_KEY` — the canonical key strings.
+- `isEditableElement(el)` / `isFocusInsideEditableElement()` — utilities to skip
+  shortcuts when the user is typing in an editable control.
+- `createShortcutMatcher(key, handler)` — factory that builds a `keydown` handler
+  matching the given key while honouring the modifier and editable-element rules.
+  Components register their listeners using this helper so the suppression rules
+  stay consistent across the app.
+
+#### Accessibility behavior
+
+The dialog exposes the accessibility contract required by WAI‑ARIA Authoring
+Practices for modal dialogs:
+
+- `role="dialog"`, `aria-modal="true"`, and `aria-labelledby` linking the dialog
+  to its visible heading.
+- Focus moves into the dialog on open (the Close button receives focus first so
+  screen-reader users land in an actionable element).
+- Focus is **trapped** while the dialog is open: `Tab` and `Shift+Tab` cycle
+  through the focusable elements inside the dialog and wrap at the boundaries.
+- `Escape` closes the dialog from anywhere inside it (and from the backdrop
+  region as a safety net).
+- Clicks on the **backdrop** close the dialog; clicks bubbling up from inside
+  the dialog card do not, because the handler tests `event.target ===
+  event.currentTarget`.
+- The element that held focus before the dialog opened is restored on close,
+  scheduled with a microtask so focus does not visibly drop to `<body>`. If that
+  element has been removed from the DOM in the meantime, the restore step is
+  silently skipped.
+
+#### Adding a new shortcut
+
+1. Append a new entry to `KEYBOARD_SHORTCUTS` in `lib/shortcuts.js`:
+
+   ```js
+   {
+     id: "my-shortcut",
+     key: "g",
+     description: "Jump to the invoice listing",
+     scope: "page",
+   }
+   ```
+
+2. Wire the behaviour in the owning component, importing the key constant and
+   `createShortcutMatcher` from `lib/shortcuts.js`:
+
+   ```js
+   useEffect(() => {
+     const handler = createShortcutMatcher(MY_SHORTCUT_KEY, (e) => {
+       e.preventDefault();
+       document.getElementById("invoice-listing")?.focus();
+     });
+     document.addEventListener("keydown", handler);
+     return () => document.removeEventListener("keydown", handler);
+   }, []);
+   ```
+
+3. Run `npm test` — `components/ShortcutHelpDialog.test.tsx` will exercise the
+   registry wiring and `components/InvoiceSearch.shortcut.test.tsx` will continue
+   to assert the existing `/` shortcut is preserved.
 
 ## Automated Accessibility Tests (CI)
 
