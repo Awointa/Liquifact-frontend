@@ -9,11 +9,14 @@ import InvoiceSearch from "@/components/InvoiceSearch";
 import InvoiceFilters, {
   DEFAULT_FILTERS,
   StatusLegendFilter,
+  WatchlistToggle,
   hasAnyActiveFilters,
   parseSortState,
 } from "@/components/InvoiceFilters";
+import InvoiceCard from "@/components/InvoiceCard";
 import Pagination from "@/components/Pagination";
 import NavMenu from "@/components/NavMenu";
+import useWatchlist from "@/lib/hooks/useWatchlist";
 import { copy } from "../copy/en";
 // Mock data is sourced exclusively from lib.js (single source of truth until the API client lands).
 import { loadMockInvoices } from "./lib";
@@ -116,6 +119,10 @@ export function applySortToList(list, filters) {
  * stale in-flight request via AbortController, and re-announces via the
  * polite status region once the new load settles.
  *
+ * Supports a watchlist feature where investors can star invoices for
+ * follow-up.  A watchlist-only view mode composes with the existing
+ * search and filter predicates.
+ *
  * @param {object}   props
  * @param {Function} [props.loadInvoices] - Async function that resolves to an
  *   invoice array.  Defaults to the mock loader; injectable for testing.
@@ -130,6 +137,10 @@ export function InvestMarketplace({ loadInvoices = loadMockInvoices }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [loadError, setLoadError] = useState("");
   const [filters, setFilters] = useState(DEFAULT_FILTERS);
+  const [watchlistOnly, setWatchlistOnly] = useState(false);
+
+  // Watchlist hook — persisted via localStorage
+  const { watchlist, toggleWatch, isWatched, pruneWatchlist } = useWatchlist();
 
   /**
    * Incrementing retryKey causes the load effect to re-run, implementing
@@ -216,8 +227,12 @@ export function InvestMarketplace({ loadInvoices = loadMockInvoices }) {
     if (Array.isArray(filters.statuses) && filters.statuses.length > 0) {
       list = list.filter((inv) => filters.statuses.includes(inv.status));
     }
+    // Watchlist-only filter — composes with all other predicates
+    if (watchlistOnly && Array.isArray(watchlist)) {
+      list = list.filter((inv) => watchlist.includes(inv.id));
+    }
     return applySortToList(list, filters);
-  }, [invoices, debouncedSearch, filters]);
+  }, [invoices, debouncedSearch, filters, watchlistOnly, watchlist]);
 
   const filterActive = hasAnyActiveFilters(filters, debouncedSearch);
 
@@ -231,6 +246,8 @@ export function InvestMarketplace({ loadInvoices = loadMockInvoices }) {
    * - retryKey is the sole dependency that forces a re-run on retry; it does
    *   not interact with the abort/isActive logic in any racy way because the
    *   cleanup always runs before the next effect body executes.
+   * - After loading, prune stale watchlist IDs that no longer exist in the API
+   *   response so the watchlist never references missing invoices.
    */
   useEffect(() => {
     let isActive = true;
@@ -246,6 +263,10 @@ export function InvestMarketplace({ loadInvoices = loadMockInvoices }) {
 
         setInvoices(normalizedInvoices);
         setLoadError("");
+
+        // Prune stale watchlist IDs that are no longer returned by the API.
+        const validIds = normalizedInvoices.map((inv) => inv.id);
+        pruneWatchlist(validIds);
       } catch {
         if (!isActive) return;
 
@@ -261,7 +282,8 @@ export function InvestMarketplace({ loadInvoices = loadMockInvoices }) {
       controller.abort();
     };
     // retryKey triggers a fresh load on retry without changing loadInvoices.
-  }, [loadInvoices, retryKey]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loadInvoices, retryKey, pruneWatchlist]);
 
   // Derive the polite live-region announcement directly from reactive state.
   // Using useMemo (rather than a useEffect + setState) avoids a cascading
@@ -307,19 +329,11 @@ export function InvestMarketplace({ loadInvoices = loadMockInvoices }) {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
-      {/* <header className="border-b border-slate-800 px-6 py-4">
-        <Link
-          href="/"
-          className="inline-block py-3 text-xl font-semibold tracking-tight text-cyan-400 hover:underline"
-        >
-          ← LiquiFact
-        </Link>
-      </header> */}
       <NavMenu />
 
       <main className="max-w-4xl mx-auto px-6 py-12">
         {/* Polite live region – announced to screen readers on every state change */}
-        <div role="status" aria-live="polite" aria-atomic="true" className="sr-only">
+        <div role="status" aria-live="polite" aria-atomic="true" data-testid="marketplace-status" className="sr-only">
           {statusMessage}
         </div>
 
@@ -351,6 +365,21 @@ export function InvestMarketplace({ loadInvoices = loadMockInvoices }) {
           onStatusToggle={handleStatusToggle}
           onClearStatuses={handleClearStatuses}
         />
+
+        {/* Watchlist toggle — interactive, sits outside the disabled filters fieldset */}
+        <div className="mb-4 flex items-center gap-3">
+          <WatchlistToggle
+            active={watchlistOnly}
+            onToggle={setWatchlistOnly}
+            watchlistCount={Array.isArray(watchlist) ? watchlist.length : 0}
+          />
+          {/* Show watchlist size when active */}
+          {watchlistOnly && Array.isArray(watchlist) && watchlist.length > 0 && (
+            <span className="text-xs text-slate-500">
+              Showing {filteredInvoices.length} of {watchlist.length} watched
+            </span>
+          )}
+        </div>
 
         <fieldset
           className="mb-8 rounded-xl border border-slate-800 bg-slate-900/30 p-6"
@@ -396,25 +425,12 @@ export function InvestMarketplace({ loadInvoices = loadMockInvoices }) {
           <>
             <ul aria-label={copy.invest.listAriaLabel} className="space-y-4">
               {filteredInvoices.slice(0, visibleCount).map((inv) => (
-                <li key={inv.id} className="rounded-xl border border-slate-800 bg-slate-900/50 p-5">
-                  <div className="flex items-center justify-between mb-3">
-                    <Link
-                      href={`/invest/${inv.id}`}
-                      className="font-medium text-slate-100 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-400 rounded"
-                    >
-                      {inv.issuer}
-                    </Link>
-                    <span className="text-xs font-semibold px-2 py-1 rounded-full bg-cyan-900/60 text-cyan-300">
-                      {inv.status}
-                    </span>
-                  </div>
-                  <div className="flex gap-6 text-sm text-slate-400">
-                    <span>
-                      {inv.currency}&nbsp;{inv.amount}
-                    </span>
-                    <span>{copy.invest.labelYield}{inv.yield}</span>
-                    <span>{copy.invest.labelMaturity}{inv.dueDate}</span>
-                  </div>
+                <li key={inv.id}>
+                  <InvoiceCard
+                    invoice={inv}
+                    isWatched={isWatched(inv.id)}
+                    onToggleWatch={toggleWatch}
+                  />
                 </li>
               ))}
             </ul>

@@ -814,6 +814,169 @@ setWallet(undefined);
 
 ---
 
+### `useWatchlist`
+
+A persisted watchlist hook built on top of `useLocalStorage`. Manages a set of invoice IDs that the investor has "starred" for follow-up. The watchlist survives page reloads and browser sessions.
+
+**File:** `lib/hooks/useWatchlist.js`
+
+#### Return value
+
+| Property          | Type                  | Description                                                               |
+| ----------------- | --------------------- | ------------------------------------------------------------------------- |
+| `watchlist`       | `string[]`            | Array of watched invoice IDs                                              |
+| `toggleWatch`     | `(invoiceId) => void` | Add or remove an ID from the watchlist                                    |
+| `isWatched`       | `(invoiceId) => bool` | Check whether an ID is currently watched                                  |
+| `pruneWatchlist`  | `(validIds) => void`  | Remove IDs not in `validIds` — use after loading to clean stale references |
+
+#### Behaviour
+
+- Initialised as an empty array. After mount, the stored value is read from `localStorage` under `"liquifact:watchlist"`.
+- `toggleWatch(invoiceId)` adds the ID if absent and removes it if present.
+- `pruneWatchlist(validIds)` filters the watchlist to only include IDs present in the supplied array. Call this after loading invoices from the API to prune stale references to invoices that no longer exist.
+- All side-effects are safe for SSR (delegates to `useLocalStorage` which never reads or writes storage during render).
+- The returned object is memoised so it can be used in dependency arrays without causing infinite re-renders.
+
+#### Example
+
+```jsx
+'use client';
+
+import useWatchlist from "@/lib/hooks/useWatchlist";
+
+function InvoiceCard({ invoice }) {
+  const { watchlist, toggleWatch, isWatched } = useWatchlist();
+  const watched = isWatched(invoice.id);
+
+  return (
+    <div>
+      <button
+        type="button"
+        aria-pressed={watched}
+        aria-label={watched ? `Unstar invoice ${invoice.id}` : `Star invoice ${invoice.id}`}
+        onClick={() => toggleWatch(invoice.id)}
+      >
+        {watched ? "\u2605" : "\u2606"}
+      </button>
+      {/* invoice details */}
+    </div>
+  );
+}
+
+// Prune stale IDs after loading from API
+const { pruneWatchlist } = useWatchlist();
+useEffect(() => {
+  fetchInvoices().then((invoices) => {
+    setInvoices(invoices);
+    pruneWatchlist(invoices.map((inv) => inv.id));
+  });
+}, []);
+```
+
+---
+
+### `WatchlistToggle`
+
+A toggle button that switches between "all invoices" and "watchlist only" views. Composes with the existing search and filter predicates — when watchlist-only is active, the current search + filter results are further narrowed to watched invoices.
+
+**File:** `components/InvoiceFilters.jsx` (named export `WatchlistToggle`)
+
+#### Props
+
+| Prop             | Type       | Default | Description                                                      |
+| ---------------- | ---------- | ------- | ---------------------------------------------------------------- |
+| `active`         | `boolean`  | —       | Whether watchlist-only mode is currently active                  |
+| `onToggle`       | `Function` | —       | Called with the next boolean value when the button is clicked    |
+| `watchlistCount` | `number`   | `0`     | Current number of watched invoices; shown as a badge when > 0    |
+
+#### Behaviour
+
+- Renders with `aria-pressed` to communicate the toggle state.
+- Displays a star icon (filled when active, outline when inactive).
+- When not active and `watchlistCount > 0`, shows a badge with the count.
+- Active state uses amber-300 text on amber-900/20 background for visual distinction.
+
+#### Accessibility
+
+- `aria-pressed` communicates toggle state to screen readers.
+- `aria-label` on the button reads `"Show all invoices"` or `"Show watchlist only"` depending on the current state.
+- The star icon SVG carries `aria-hidden="true"`.
+- `focus-visible:ring` for keyboard visibility.
+
+#### Integration in `app/invest/page.js`
+
+The toggle is rendered outside the disabled filter fieldset so it stays interactive. Watchlist filtering is applied in the `filteredInvoices` useMemo — when `watchlistOnly` is true, only invoices whose IDs are in the watchlist are shown.
+
+```jsx
+import { WatchlistToggle } from '@/components/InvoiceFilters';
+import useWatchlist from '@/lib/hooks/useWatchlist';
+
+function InvestMarketplace() {
+  const [watchlistOnly, setWatchlistOnly] = useState(false);
+  const { watchlist, isWatched, toggleWatch } = useWatchlist();
+
+  return (
+    <>
+      <WatchlistToggle
+        active={watchlistOnly}
+        onToggle={setWatchlistOnly}
+        watchlistCount={watchlist.length}
+      />
+      {invoices.map((inv) => (
+        <InvoiceCard
+          key={inv.id}
+          invoice={inv}
+          isWatched={isWatched(inv.id)}
+          onToggleWatch={toggleWatch}
+        />
+      ))}
+    </>
+  );
+}
+```
+
+---
+
+### `InvoiceCard` — star toggle
+
+`InvoiceCard` optionally displays a star (watchlist) toggle button when the `onToggleWatch` callback is provided. The toggle button uses `aria-pressed` to communicate its state and includes the invoice reference in its accessible name.
+
+**File:** `components/InvoiceCard.jsx`
+
+#### Additional props
+
+| Prop           | Type       | Default | Description                                                        |
+| -------------- | ---------- | ------- | ------------------------------------------------------------------ |
+| `isWatched`    | `boolean`  | `false` | Whether this invoice is currently in the watchlist                 |
+| `onToggleWatch`| `Function` | —       | Called with the invoice ID when the star button is clicked. When omitted, the star button is not rendered. |
+
+#### Example with watchlist
+
+```jsx
+import InvoiceCard from '@/components/InvoiceCard';
+import useWatchlist from '@/lib/hooks/useWatchlist';
+
+function Marketplace() {
+  const { isWatched, toggleWatch } = useWatchlist();
+
+  return (
+    <ul>
+      {invoices.map((inv) => (
+        <li key={inv.id}>
+          <InvoiceCard
+            invoice={inv}
+            isWatched={isWatched(inv.id)}
+            onToggleWatch={toggleWatch}
+          />
+        </li>
+      ))}
+    </ul>
+  );
+}
+```
+
+---
+
 ## Design tokens
 
 Global tokens defined in `app/globals.css` and driven by the `[data-theme]` attribute (set by `ThemeToggle`).

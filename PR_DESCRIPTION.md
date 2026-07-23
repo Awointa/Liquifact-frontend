@@ -149,3 +149,72 @@ cargo test -p gas-tank
 # 10 passed; 0 failed
 ```
 
+---
+
+## PR 4 — feat/invest-watchlist-starred-invoices
+
+**Branch:** `feature/watchlist-starred-invoices`
+**Base:** `main`
+**Upstream:** `https://github.com/Liquifact/Liquifact-frontend`
+
+### Summary
+
+Let investors star invoices into a persisted watchlist. A star control on `InvoiceCard.jsx` backed by `useWatchlist` (which delegates to `useLocalStorage`) persists a watchlist across sessions. A watchlist-only view mode in `InvoiceFilters.jsx` composes with existing search and filter predicates. Stale watchlist IDs are pruned on load when invoices disappear from the API.
+
+Closes #461
+
+### Motivation
+
+Investors browsing the marketplace have no way to shortlist invoices they are considering; every visit restarts from the full list. This feature adds a star toggle per card so investors can build a persisted shortlist, plus a watchlist-only filter mode to view only their starred invoices.
+
+### Changes
+
+**`lib/hooks/useWatchlist.js` [NEW]**
+- Custom hook built on `useLocalStorage` managing a set of watched invoice IDs under the key `"liquifact:watchlist"`.
+- `toggleWatch(invoiceId)` — adds or removes an ID.
+- `isWatched(invoiceId)` — returns `true` when the ID is in the list.
+- `pruneWatchlist(validIds)` — removes IDs not in the supplied valid set (used for stale-cleanup).
+- SSR-safe — the underlying `useLocalStorage` never reads/writes storage during render.
+- Returned object is memoised for stable dependency arrays.
+
+**`lib/hooks/useWatchlist.test.tsx` [NEW]**
+- 27 tests covering: initial state, toggle add/remove, multiple IDs, isWatched sync, persistence to localStorage, corrupted state recovery, pruning (all edge cases including empty, null, and partial sets), and reference stability across re-renders.
+
+**`components/InvoiceCard.jsx`**
+- Added optional `isWatched` (boolean) and `onToggleWatch` (function) props.
+- When `onToggleWatch` is provided, renders a star toggle button with:
+  - `aria-pressed={isWatched}` for correct toggle semantics.
+  - `aria-label` including the invoice reference (e.g. `"Star invoice INV-001"` / `"Unstar invoice INV-001"`).
+  - Filled star icon (amber-400) when watched, outline star icon when not.
+  - `focus-visible:ring` for keyboard accessibility.
+
+**`components/InvoiceFilters.jsx`**
+- Added named export `WatchlistToggle` component with:
+  - `aria-pressed` toggle state.
+  - `aria-label` communicating current view (`"Show all invoices"` / `"Show watchlist only"`).
+  - Star icon (filled when active, outline when inactive).
+  - Watchlist count badge when watchlist has items but toggle is off.
+
+**`app/invest/page.js`**
+- Integrated `useWatchlist` hook — `watchlist`, `toggleWatch`, `isWatched`, `pruneWatchlist`.
+- Added `watchlistOnly` state managed via `WatchlistToggle`.
+- Watchlist filtering applied in `filteredInvoices` useMemo AFTER all other predicates — composes with search, currency, yield range, maturity range, and status filters.
+- Replaced inline invoice rendering with `InvoiceCard` component, passing `isWatched` and `onToggleWatch`.
+- `pruneWatchlist(validIds)` called in the load effect after invoices resolve, cleaning up stale IDs.
+- Watchlist toggle placed outside the disabled filter fieldset so it stays interactive.
+
+**`app/invest/page.test.jsx`**
+- Updated all `getByRole("status")` queries to `getByTestId("marketplace-status")` to disambiguate from `StatusPill` components that also use `role="status"`.
+
+**`COMPONENTS.md`**
+- Added documentation for `useWatchlist` hook with return value table, behaviour contract, and examples.
+- Added documentation for `WatchlistToggle` component with props table, behaviour, and integration example.
+- Added documentation for `InvoiceCard` star toggle props with example.
+
+### Testing
+
+```
+npx jest --testPathPatterns='useWatchlist|InvoiceCard|InvoiceFilters|app/invest' --no-coverage
+# 11 suites passed, 260 tests passed, 28 skipped (pre-existing skips)
+# Snapshots: 1 passed (updated for new card structure)
+```

@@ -93,7 +93,7 @@ describe("InvestMarketplace", () => {
     });
 
     expect(skeleton).toHaveAttribute("aria-busy", "true");
-    const status = screen.getByRole("status");
+    const status = screen.getByTestId("marketplace-status");
     expect(status).toHaveTextContent("");
     expect(status).toHaveAttribute("aria-live", "polite");
   });
@@ -139,15 +139,15 @@ describe("InvestMarketplace", () => {
 
     await flushTimers(100);
 
-    expect(screen.getByRole("status")).toHaveTextContent("3 investable invoices loaded");
+    expect(screen.getByTestId("marketplace-status")).toHaveTextContent("3 investable invoices loaded");
     expect(getInvoiceListItems()).toHaveLength(3);
-    expect(screen.getByRole("status")).toHaveAttribute("aria-live", "polite");
+    expect(screen.getByTestId("marketplace-status")).toHaveAttribute("aria-live", "polite");
     expect(loadInvoices).toHaveBeenCalledTimes(1);
 
     rerender(<InvestMarketplace loadInvoices={loadInvoices} />);
 
     expect(loadInvoices).toHaveBeenCalledTimes(1);
-    expect(screen.getByRole("status")).toHaveTextContent("3 investable invoices loaded");
+    expect(screen.getByTestId("marketplace-status")).toHaveTextContent("3 investable invoices loaded");
   });
 
   it("renders each invoice as a list item once the marketplace loads", async () => {
@@ -185,7 +185,7 @@ describe("InvestMarketplace", () => {
     render(<InvestMarketplace loadInvoices={createDeferredLoader([], 100)} />);
     await flushTimers(100);
 
-    const status = screen.getByRole("status");
+    const status = screen.getByTestId("marketplace-status");
     expect(status).toHaveTextContent("No invoices available");
     expect(status).toHaveAttribute("aria-live", "polite");
     expect(
@@ -199,7 +199,7 @@ describe("InvestMarketplace", () => {
     render(<InvestMarketplace loadInvoices={loadInvoices} />);
     await flushTimers(100);
 
-    const status = screen.getByRole("status");
+    const status = screen.getByTestId("marketplace-status");
     expect(status).toHaveTextContent("No invoices available");
     expect(status).toHaveAttribute("aria-live", "polite");
     expect(screen.queryByRole("listitem")).not.toBeInTheDocument();
@@ -219,7 +219,7 @@ describe("InvestMarketplace", () => {
     render(<InvestMarketplace loadInvoices={loadInvoices} />);
     await flushTimers(50);
 
-    const status = screen.getByRole("status");
+    const status = screen.getByTestId("marketplace-status");
     expect(status).toHaveTextContent("Unable to load investable invoices.");
     expect(status).toHaveAttribute("aria-live", "polite");
     expect(screen.getByRole("alert")).toHaveTextContent(
@@ -339,7 +339,7 @@ describe("InvestMarketplace", () => {
       await Promise.resolve();
     });
 
-    expect(screen.getByRole("status")).toHaveTextContent(
+    expect(screen.getByTestId("marketplace-status")).toHaveTextContent(
       `Showing ${total} of ${total} investable invoices`
     );
   });
@@ -650,11 +650,11 @@ describe("InvestMarketplace", () => {
     render(<InvestMarketplace loadInvoices={createDeferredLoader(invoices, 0)} />);
     await flushTimers(0);
 
-    expect(screen.getByRole("status")).toHaveTextContent("2 investable invoices loaded");
+    expect(screen.getByTestId("marketplace-status")).toHaveTextContent("2 investable invoices loaded");
 
     fireEvent.click(screen.getByLabelText("Filter by EUR"));
 
-    expect(screen.getByRole("status")).toHaveTextContent("1 of 2 invoices match");
+    expect(screen.getByTestId("marketplace-status")).toHaveTextContent("1 of 2 invoices match");
   });
 
   it("filters invoices by issuer search query after debounce", async () => {
@@ -835,7 +835,7 @@ describe("InvestMarketplace", () => {
     render(<InvestMarketplace loadInvoices={createDeferredLoader(invoices, 0)} />);
     await flushTimers(0);
 
-    expect(screen.getByRole("status")).toHaveTextContent("3 investable invoices loaded");
+    expect(screen.getByTestId("marketplace-status")).toHaveTextContent("3 investable invoices loaded");
 
     fireEvent.change(screen.getByLabelText("Search by issuer name"), {
       target: { value: "acme" },
@@ -843,7 +843,7 @@ describe("InvestMarketplace", () => {
     await flushTimers(SEARCH_DEBOUNCE_MS);
 
     // 2 of 3 invoices match "acme" (Acme Supplies Ltd and Acme Trading Co)
-    expect(screen.getByRole("status")).toHaveTextContent("2 of 3 invoices match");
+    expect(screen.getByTestId("marketplace-status")).toHaveTextContent("2 of 3 invoices match");
   });
 
   it("announces no-match when search produces zero results", async () => {
@@ -867,7 +867,7 @@ describe("InvestMarketplace", () => {
     });
     await flushTimers(SEARCH_DEBOUNCE_MS);
 
-    expect(screen.getByRole("status")).toHaveTextContent("No invoices match");
+    expect(screen.getByTestId("marketplace-status")).toHaveTextContent("No invoices match");
   });
 
   it("search does not filter before debounce delay elapses", async () => {
@@ -933,11 +933,11 @@ describe("InvestMarketplace", () => {
     render(<InvestMarketplace loadInvoices={createDeferredLoader(invoices, 0)} />);
     await flushTimers(0);
 
-    expect(screen.getByRole("status")).toHaveTextContent("2 investable invoices loaded");
+    expect(screen.getByTestId("marketplace-status")).toHaveTextContent("2 investable invoices loaded");
 
     fireEvent.click(screen.getByLabelText("Filter by EUR"));
 
-    expect(screen.getByRole("status")).toHaveTextContent("1 of 2 invoices match");
+    expect(screen.getByTestId("marketplace-status")).toHaveTextContent("1 of 2 invoices match");
   });
 
   // ── Retry / error recovery tests ──────────────────────────────────────────
@@ -991,7 +991,7 @@ describe("InvestMarketplace", () => {
 
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     expect(getInvoiceListItems()).toHaveLength(2);
-    expect(screen.getByRole("status")).toHaveTextContent("2 investable invoices loaded");
+    expect(screen.getByTestId("marketplace-status")).toHaveTextContent("2 investable invoices loaded");
   });
 
   it("retry-then-failure: shows error banner again after a second failure", async () => {
@@ -1156,7 +1156,7 @@ describe("InvestMarketplace renders from shared lib.js fixture", () => {
     render(<InvestMarketplace loadInvoices={loadMockInvoices} />);
     await flushTimers(0);
 
-    expect(screen.getByRole("status")).toHaveTextContent(
+    expect(screen.getByTestId("marketplace-status")).toHaveTextContent(
       `${MOCK_INVOICES.length} investable invoices loaded`
     );
   });
