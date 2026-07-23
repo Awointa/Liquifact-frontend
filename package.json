@@ -15,13 +15,14 @@
   "dependencies": {
     "@next/swc-wasm-nodejs": "^16.2.10",
     "@stellar/freighter-api": "^6.0.1",
+    "@testing-library/dom": "^10.4.1",
     "enhanced-resolve": "^5.24.3",
     "next": "16.2.9",
     "react": "18.2.0",
     "react-dom": "18.2.0"
   },
   "devDependencies": {
-    "@babel/core": "^8.0.1",
+    "@babel/core": "^7.27.1",
     "@jest/test-sequencer": "^30.4.1",
     "@playwright/test": "^1.60.0",
     "@size-limit/file": "^12.1.0",
@@ -44,6 +45,7 @@
     "jest-environment-jsdom": "^30.4.1",
     "prettier": "^3.9.5",
     "size-limit": "^12.1.0",
-    "tailwindcss": "^4"
+    "tailwindcss": "^4",
+    "typescript": "5.7.3"
   }
 }
