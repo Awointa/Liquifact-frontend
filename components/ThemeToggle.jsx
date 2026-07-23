@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 
 /**
  * The three theme options the user can cycle through.
@@ -79,6 +79,23 @@ export default function ThemeToggle({ className = "" }) {
       return "system";
     }
   });
+
+  const [liveAnnouncement, setLiveAnnouncement] = useState("");
+  const isFirstRender = useRef(true);
+
+  // Announce preference changes politely, debounced, skipping initial mount.
+  useEffect(() => {
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      setLiveAnnouncement(`Theme set to ${preference}`);
+    }, 150);
+
+    return () => clearTimeout(timer);
+  }, [preference]);
 
   // Keep data-theme in sync whenever the preference state changes
   useEffect(() => {
@@ -182,26 +199,36 @@ export default function ThemeToggle({ className = "" }) {
   const capitalise = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 
   return (
-    <button
-      id="theme-toggle"
-      type="button"
-      onClick={handleClick}
-      aria-label={LABELS[preference]}
-      aria-pressed={preference !== "system"}
-      title={`Current theme: ${capitalise(preference)}`}
-      data-theme-pref={preference}
-      data-theme-next={nextPref}
-      className={[
-        "rounded-lg p-2 transition-colors",
-        "text-slate-300 hover:text-cyan-400 hover:bg-slate-800",
-        "dark:text-slate-300 dark:hover:text-cyan-400",
-        "focus-ring",
-        className,
-      ]
-        .filter(Boolean)
-        .join(" ")}
-    >
-      {ICONS[preference]}
-    </button>
+    <>
+      <button
+        id="theme-toggle"
+        type="button"
+        onClick={handleClick}
+        aria-label={LABELS[preference]}
+        aria-pressed={preference !== "system"}
+        title={`Current theme: ${capitalise(preference)}`}
+        data-theme-pref={preference}
+        data-theme-next={nextPref}
+        className={[
+          "rounded-lg p-2 transition-colors",
+          "text-slate-300 hover:text-cyan-400 hover:bg-slate-800",
+          "dark:text-slate-300 dark:hover:text-cyan-400",
+          "focus-ring",
+          className,
+        ]
+          .filter(Boolean)
+          .join(" ")}
+      >
+        {ICONS[preference]}
+      </button>
+      <div
+        role="status"
+        aria-live="polite"
+        className="sr-only"
+        data-testid="theme-live-region"
+      >
+        {liveAnnouncement}
+      </div>
+    </>
   );
 }
