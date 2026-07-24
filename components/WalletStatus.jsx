@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect, useMemo, useCallback } from "react";
+import { useState, useRef, useEffect } from "react";
 import Button from "./Button";
 import { copy } from "../app/copy/en";
 import { useWallet, WALLET_STATES, truncateAddress } from "./WalletProvider";
@@ -137,15 +137,14 @@ export default function WalletStatus() {
   const toast = useToast();
 
   /**
-   * Memoize the derived button/helper config so it is only recomputed when
-   * the wallet state, walletData, or error actually change.  Unrelated parent
-   * re-renders that leave these three values unchanged will reuse the same
-   * config object reference, preventing unnecessary child re-renders.
+   * Derive the Button props from the current wallet state.
+   *
+   * `buttonVariant` maps directly to <Button variant={...}>.
+   * The `loading` prop is derived separately: it is true only while connecting
+   * so Button renders its own Spinner and sets aria-busy automatically.
+   * No inline spinner SVG is needed here.
    */
-  const config = useMemo(
-    () => getStateConfig(state, walletData, error),
-    [state, walletData, error]
-  );
+  const config = getStateConfig(state, walletData, error);
 
   // Track state transitions to announce them once via the polite live region.
   const prevStateRef = useRef(state);
@@ -169,11 +168,7 @@ export default function WalletStatus() {
     }
   }, [state]);
 
-  /**
-   * Memoize the copy-address handler so it is referentially stable across
-   * re-renders where walletData and toast have not changed.
-   */
-  const handleCopyAddress = useCallback(async () => {
+  const handleCopyAddress = async () => {
     if (!walletData?.address) return;
     try {
       await copyToClipboard(walletData.address);
@@ -181,14 +176,9 @@ export default function WalletStatus() {
     } catch {
       toast.error(copy.wallet.toastCopyErrorMsg, copy.wallet.toastCopyErrorTitle);
     }
-  }, [walletData, toast]);
+  };
 
-  /**
-   * Memoize the action button handler.  Depends only on the wallet state
-   * primitives (state, connect, disconnect) so it stays stable whenever
-   * unrelated parts of the tree re-render.
-   */
-  const handleClick = useCallback(() => {
+  const handleClick = () => {
     switch (state) {
       case WALLET_STATES.DISCONNECTED:
       case WALLET_STATES.ERROR:
@@ -218,7 +208,7 @@ export default function WalletStatus() {
       default:
         break;
     }
-  }, [state, connect, disconnect]);
+  };
 
   // The #wallet-helper-text span is only present when showAddress is false.
   // aria-describedby must only reference an element that exists in the DOM —
@@ -252,12 +242,12 @@ export default function WalletStatus() {
               </span>
               <span className="text-xs text-slate-500">{walletData.balance}</span>
             </div>
-            <Button
-              variant="secondary"
+            <button
+              type="button"
               onClick={handleCopyAddress}
               aria-label={copy.wallet.copyAddressButton}
               title={copy.wallet.copyAddressButton}
-              className="h-7 w-7 p-0 rounded-lg border border-slate-700 bg-slate-800/80 text-slate-400 hover:border-slate-600 hover:bg-slate-700 hover:text-slate-200"
+              className="inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg border border-slate-700 bg-slate-800/80 text-slate-400 transition-colors hover:border-slate-600 hover:bg-slate-700 hover:text-slate-200 focus-visible:outline-2 focus-visible:outline-cyan-400 focus-visible:outline-offset-2"
             >
               <svg
                 className="h-3.5 w-3.5"
@@ -273,7 +263,7 @@ export default function WalletStatus() {
                   d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
                 />
               </svg>
-            </Button>
+            </button>
           </div>
         ) : (
           <span id="wallet-helper-text" className="max-w-xs text-xs text-slate-400">
@@ -305,7 +295,7 @@ export default function WalletStatus() {
         onClick={handleClick}
         aria-label={config.buttonText}
         aria-describedby={helperTextId}
-        className="cursor-pointer"
+        className="focus-visible:outline-2 cursor-pointer focus-visible:outline-cyan-400 focus-visible:outline-offset-2"
       >
         {config.buttonText}
       </Button>

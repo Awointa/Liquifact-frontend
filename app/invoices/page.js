@@ -1,11 +1,17 @@
 "use client";
-
+import { useState } from "react";
 import { copy } from "../copy/en";
 import NavMenu from "../../components/NavMenu";
-import UploadView from "../../components/UploadView";
-import { loadMockInvoices } from "../invest/lib";
+import UploadZone from "../../components/UploadZone";
+import InvoiceList from "../../components/InvoiceList";
 
 export default function InvoicesPage() {
+  const [optimisticInvoices, setOptimisticInvoices] = useState([]);
+
+  const handleUploadSuccess = (invoice) => {
+    setOptimisticInvoices((current) => [invoice, ...current]);
+  };
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-50">
       <NavMenu />
@@ -20,7 +26,14 @@ export default function InvoicesPage() {
           </p>
         </div>
 
-        <UploadView loadInvoices={loadMockInvoices} />
+        <div className="grid gap-10 lg:grid-cols-3">
+          <div className="lg:col-span-1">
+            <UploadZone onUploadSuccess={handleUploadSuccess} />
+          </div>
+          <div className="lg:col-span-2">
+            <InvoiceList optimisticInvoices={optimisticInvoices} />
+          </div>
+        </div>
       </main>
     </div>
   );

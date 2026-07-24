@@ -1,7 +1,9 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
+import ErrorBanner from "./ErrorBanner";
 import EmptyState, { InvoiceEmptyIllustration } from "./EmptyState";
+import InvoiceListSkeleton from "./InvoiceListSkeleton";
 import { copy } from "../app/copy/en";
 
 const INVOICE_STATUSES = {
@@ -11,6 +13,10 @@ const INVOICE_STATUSES = {
   SETTLED: "Settled",
 };
 
+const user = {
+  name: "boss",
+};
+
 const STATUS_STYLES = {
   [INVOICE_STATUSES.PENDING_TOKENIZATION]:
     "bg-amber-500/10 text-amber-200 ring-1 ring-amber-400/20",
@@ -18,6 +24,137 @@ const STATUS_STYLES = {
   [INVOICE_STATUSES.FUNDED]: "bg-emerald-500/10 text-emerald-200 ring-1 ring-emerald-400/20",
   [INVOICE_STATUSES.SETTLED]: "bg-slate-800/80 text-slate-200 ring-1 ring-slate-500/20",
 };
+
+const MOCK_INVOICES = [
+  {
+    id: "inv-1001",
+    issuer: "Test Supplier",
+    amount: "12,500",
+    currency: "USD",
+    dueDate: "2026-06-15",
+    yield: "8.2%",
+    status: INVOICE_STATUSES.TOKENIZED,
+  },
+  {
+    id: "inv-1002",
+    issuer: "Another LLC",
+    amount: "7,800",
+    currency: "EUR",
+    dueDate: "2026-07-01",
+    yield: "7.5%",
+    status: INVOICE_STATUSES.SETTLED,
+  },
+];
+
+async function copyToClipboard(text) {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+  // Guarded execCommand fallback for browsers without the Clipboard API.
+  const el = document.createElement("textarea");
+  el.value = text;
+  el.setAttribute("readonly", "");
+  el.style.cssText = "position:fixed;left:-9999px;top:-9999px";
+  document.body.appendChild(el);
+  el.select();
+  document.execCommand("copy");
+  document.body.removeChild(el);
+}
+
+function AddressCopyButton({ address }) {
+  const [copied, setCopied] = useState(false);
+  const timerRef = useRef(null);
+
+  useEffect(() => {
+    return () => clearTimeout(timerRef.current);
+  }, []);
+
+  const handleCopy = async () => {
+    try {
+      await copyToClipboard(address);
+      setCopied(true);
+      clearTimeout(timerRef.current);
+      timerRef.current = setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Copy blocked by browser — fail silently, no error surface.
+    }
+  };
+
+  const display = truncateAddress(address);
+
+  return (
+    <div className="mt-1 flex items-center gap-1.5">
+      <span
+        className="font-mono text-xs text-slate-400"
+        title={address}
+        aria-label={`Issuer address: ${address}`}
+      >
+        {display}
+      </span>
+      <button
+        type="button"
+        onClick={handleCopy}
+        aria-label={copied ? "Copied!" : `Copy issuer address ${display}`}
+        title={copied ? "Copied!" : "Copy issuer address"}
+        className="inline-flex h-5 w-5 items-center justify-center rounded text-slate-500 hover:text-slate-300 focus-ring transition-colors"
+      >
+        {copied ? (
+          <svg
+            aria-hidden="true"
+            width="12"
+            height="12"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <polyline points="20 6 9 17 4 12" />
+          </svg>
+        ) : (
+          <svg
+            aria-hidden="true"
+            width="12"
+            height="12"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+          </svg>
+        )}
+        <span className="sr-only">{copied ? "Copied!" : "Copy"}</span>
+      </button>
+      {copied && (
+        <span role="status" aria-live="polite" className="text-xs text-emerald-400">
+          Copied!
+        </span>
+      )}
+    </div>
+  );
+}
+
+function loadMockInvoices() {
+  return Promise.resolve(MOCK_INVOICES);
+}
+
+function getInvoiceAnnouncement(items) {
+  if (!Array.isArray(items)) {
+    return "";
+  }
+
+  if (items.length === 0) {
+    return "No invoices are currently available.";
+  }
+
+  return `${items.length} invoice${items.length === 1 ? "" : "s"} available.`;
+}
 
 function mergeInvoices(optimisticInvoices, loadedInvoices) {
   const mergedById = new Map();
@@ -61,22 +198,64 @@ export function getMaturityBadgeProps(days) {
   };
 }
 
-/**
- * InvoiceList Component
- *
- * Presentational component that renders a list of invoices.
- * Merges loaded invoices with optimistic updates from the upload flow.
- * Handles its own empty state display.
- *
- * @param {Object} props
- * @param {Array} [props.invoices=[]] - List of invoices loaded from the API.
- * @param {Array} [props.optimisticInvoices=[]] - List of invoices recently uploaded but not yet in the API.
- */
-export default function InvoiceList({ invoices = [], optimisticInvoices = [] }) {
+export default function InvoiceList({ loadInvoices = loadMockInvoices, optimisticInvoices = [] }) {
+  const [invoices, setInvoices] = useState(null);
+  const [loadError, setLoadError] = useState("");
+
   const mergedInvoices = useMemo(
-    () => mergeInvoices(optimisticInvoices, invoices),
+    () => mergeInvoices(optimisticInvoices, invoices ?? []),
     [optimisticInvoices, invoices]
   );
+
+  const statusMessage = useMemo(() => {
+    if (loadError) return loadError;
+    if (invoices === null) return "Loading invoices...";
+    return getInvoiceAnnouncement(mergedInvoices);
+  }, [invoices, mergedInvoices, loadError]);
+
+  useEffect(() => {
+    let active = true;
+
+    async function load() {
+      setInvoices(null);
+      setLoadError("");
+
+      try {
+        const result = await loadInvoices();
+        if (!active) return;
+
+        const normalized = Array.isArray(result) ? result : [];
+        setInvoices(normalized);
+      } catch (error) {
+        if (!active) return;
+
+        setLoadError(copy.invoices.errorDescription || "Unable to load invoices.");
+        setInvoices([]);
+      }
+    }
+
+    load();
+    return () => {
+      active = false;
+    };
+  }, [loadInvoices]);
+
+  // Compute status message inline in render
+
+  if (loadError) {
+    return (
+      <div className="space-y-6">
+        <ErrorBanner
+          title={copy.invoices.errorTitle || "Unable to load invoices"}
+          description={loadError}
+          previewLabel="Invoice list status"
+        />
+        <p role="status" aria-live="polite" aria-atomic="true" className="sr-only">
+          {statusMessage}
+        </p>
+      </div>
+    );
+  }
 
   return (
     <section aria-labelledby="invoice-list-heading" className="space-y-4">
@@ -89,16 +268,18 @@ export default function InvoiceList({ invoices = [], optimisticInvoices = [] }) 
             Track tokenization progress for uploaded documents.
           </p>
         </div>
+        <p role="status" aria-live="polite" aria-atomic="true" className="sr-only">
+          {statusMessage}
+        </p>
       </div>
 
-      {mergedInvoices.length === 0 ? (
+      {invoices === null && mergedInvoices.length === 0 ? (
+        <InvoiceListSkeleton rows={3} />
+      ) : mergedInvoices.length === 0 ? (
         <EmptyState
           icon={<InvoiceEmptyIllustration />}
           title="No invoices yet"
-          description={
-            copy.invoices.emptyState ||
-            "Upload your first invoice to get started. It will appear here once tokenized."
-          }
+          description="Upload your first invoice to get started. It will appear here once tokenized."
           action={
             <a
               href="#invoice-upload-btn"

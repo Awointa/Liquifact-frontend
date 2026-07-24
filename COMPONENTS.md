@@ -16,7 +16,6 @@ Shared UI components for the LiquiFact frontend. All components live under `comp
 - [InvoiceSearch](#invoicesearch)
 - [InvoiceTimeline](#invoicetimeline)
 - [NavMenu](#navmenu)
-- [Settings](#settings)
 - [StatusPill](#statuspill)
 - [ThemeToggle](#themetoggle)
 - [ToastProvider / useToast](#toastprovider--usetoast)
@@ -415,11 +414,14 @@ Responsive site-wide header navigation used on every page.
 
 ### Props
 
-The component currently accepts no props.
+| Prop            | Type       | Default            | Description                                      |
+| --------------- | ---------- | ------------------ | ------------------------------------------------ |
+| `walletLabel`   | `string`   | `'Connect Wallet'` | Label text rendered inside the wallet button     |
+| `onWalletClick` | `function` | —                  | Callback fired when the wallet button is clicked |
 
 ### Behaviour
 
-- **Desktop (≥ `md` breakpoint):** Home, Invoices, and Invest links render inline in the header row alongside the network badge and lazy-loaded wallet UI.
+- **Desktop (≥ `md` breakpoint):** Home, Invoices, and Invest links render inline in the header row alongside the wallet button.
 - **Mobile (< `md` breakpoint):** Nav links are hidden behind a hamburger toggle (☰). Clicking the toggle reveals a dropdown menu below the header bar.
 - The active route is detected automatically via `usePathname` and marked with `aria-current="page"` on the matching link.
 - The menu closes on **Escape** (focus returns to the toggle button), on any navigation event (pathname change), or when the toggle is clicked again.
@@ -427,7 +429,6 @@ The component currently accepts no props.
 ### Accessibility
 
 - Toggle button exposes `aria-expanded` and `aria-controls` so assistive technologies announce the disclosure state.
-- The mobile menu uses a navigation landmark and moves focus into the menu when opened.
 - All links carry `aria-current="page"` on the active route.
 - Passes `jest-axe` checks in both open and closed states.
 - All interactive elements have visible `focus-visible` outlines using the cyan-400 design token.
@@ -437,6 +438,7 @@ The component currently accepts no props.
 ```jsx
 import NavMenu from "@/components/NavMenu";
 
+// Drop-in replacement for the static <header> on any page
 export default function MyPage() {
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
@@ -445,9 +447,13 @@ export default function MyPage() {
     </div>
   );
 }
+
+// With Stellar wallet integration
+<NavMenu walletLabel="Freighter" onWalletClick={handleConnectWallet} />;
 ```
 
 ---
+
 ## ToastProvider / useToast
 
 Context-based toast notification system. Wrap your app (or the relevant subtree) with `ToastProvider`, then call `useToast()` anywhere inside to fire toasts.
@@ -468,24 +474,12 @@ Context-based toast notification system. Wrap your app (or the relevant subtree)
 | `error(message, title?)`   | Show a red error toast     |
 | `info(message, title?)`    | Show a cyan info toast     |
 
-> **Throws** if called outside a `<ToastProvider>` tree: `useToast must be used within a ToastProvider`.
-
 ### Behaviour
 
 - Toasts auto-dismiss after **5 seconds**.
 - Hovering a toast pauses the dismiss timer; leaving resumes it.
 - Multiple toasts stack vertically; newest appears at the top.
-- **Stack limit:** at most **3** toasts are shown at once (`MAX_TOASTS`). Triggering a 4th toast removes the oldest (bottom) toast and its timer to make room.
-- **Deduplication:** a toast is keyed by `variant::title::message`. Firing a toast that matches an already-visible toast's key does not add a duplicate — it moves the existing toast back to the top of the stack and restarts its 5-second timer.
 - The toast container uses `aria-live="polite"` and `role="status"`.
-
-### Keyboard accessibility
-
-- Each toast card is focusable (`tabIndex={0}`), so keyboard users can `Tab` to a toast.
-- Focusing a toast (or any element inside it, e.g. the Close button) pauses its auto-dismiss timer, same as hovering. Blurring away from the toast resumes it.
-- Pressing **Escape** dismisses the most recently added toast — this works from anywhere in the document, not only while a toast has focus.
-- On dismiss (via Escape or the Close button), focus is restored to whichever element was focused immediately before the toast gained focus, so keyboard users don't lose their place in the page.
-- The Close button has `aria-label="Dismiss notification"`.
 
 ### Example
 
@@ -570,7 +564,6 @@ Stellar wallet connection UI. Shows a status indicator dot, wallet address / hel
 
 **File:** `components/WalletStatus.jsx`
 
-> For the underlying state machine, the `useWallet()` hook API, and localStorage persistence rules this component consumes, see [`docs/wallet-developer-guide.md`](docs/wallet-developer-guide.md).
 ---
 
 ## Formatting Utilities
@@ -624,64 +617,6 @@ import WalletStatus from "@/components/WalletStatus";
 
 // Renders within a ToastProvider (required for connection toasts)
 <WalletStatus />;
-```
-
----
-
-## Settings
-
-A user-preferences panel that surfaces application-level settings. Currently exposes the theme preference (light / dark / system) by composing [`ThemeToggle`](#themetoggle). The panel renders as a `<section>` landmark with an `aria-labelledby` heading and an accessible label/control association on every preference row.
-
-**File:** `components/Settings.jsx`
-
-### Named exports
-
-| Export           | Description                                                                 |
-| ---------------- | --------------------------------------------------------------------------- |
-| `default` (`Settings`) | The user-preferences panel component                                  |
-| `VALID_HEADINGS` | `['h1','h2','h3','h4','h5','h6']` — the set of accepted `headingLevel` values |
-
-### Props
-
-| Prop           | Type      | Default  | Description                                                                                                                                         |
-| -------------- | --------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `className`    | `string`  | `''`     | Additional Tailwind classes forwarded to the root `<section>` alongside the component's default styles.                                             |
-| `headingLevel` | `string`  | `'h2'`   | HTML heading element for the "Settings" title. Accepts `'h1'`–`'h6'`. Any value outside `VALID_HEADINGS` silently falls back to `'h2'`.             |
-| `showHeading`  | `boolean` | `true`   | When `false`, the heading is rendered with `sr-only` so it is visually hidden but still present in the DOM for `aria-labelledby` resolution.        |
-
-### Internal state
-
-None. All preference state (current theme, persisted value) is owned by the composed `ThemeToggle` component and its underlying `useLocalStorage` hook.
-
-### Preference rows
-
-| Row     | Control        | Persistence           | Description                                      |
-| ------- | -------------- | --------------------- | ------------------------------------------------ |
-| Theme   | `ThemeToggle`  | `localStorage`        | Cycles light → dark → system. See [ThemeToggle](#themetoggle) for the full contract. |
-
-### Accessibility
-
-- The root `<section>` carries `aria-labelledby="settings-heading"` so screen readers announce the region as _"Settings"_ when the user navigates to it.
-- The heading element is always present in the DOM — even when `showHeading=false` applies `sr-only` — so the `aria-labelledby` IDREF never dangles.
-- Each preference row pairs a visible `<label>` with its control via `htmlFor` / `id`, satisfying WCAG 2.1 §1.3.1 (Info and Relationships).
-- Passes `jest-axe` checks for all prop combinations (default, `showHeading=false`, `headingLevel='h3'`).
-
-### Example
-
-```jsx
-import Settings from '@/components/Settings';
-
-// Drop-in panel — default h2 heading, heading visible
-<Settings />
-
-// Nested inside another headed section — downgrade heading to h3
-<section aria-labelledby="account-heading">
-  <h2 id="account-heading">Account</h2>
-  <Settings headingLevel="h3" />
-</section>
-
-// Visually hidden heading (accessible name still present for screen readers)
-<Settings showHeading={false} className="mt-6" />
 ```
 
 ---
@@ -1082,169 +1017,6 @@ setWallet((prev) => ({ ...prev, network: 'PUBLIC' }));
 
 // Reset.
 setWallet(undefined);
-```
-
----
-
-### `useWatchlist`
-
-A persisted watchlist hook built on top of `useLocalStorage`. Manages a set of invoice IDs that the investor has "starred" for follow-up. The watchlist survives page reloads and browser sessions.
-
-**File:** `lib/hooks/useWatchlist.js`
-
-#### Return value
-
-| Property          | Type                  | Description                                                               |
-| ----------------- | --------------------- | ------------------------------------------------------------------------- |
-| `watchlist`       | `string[]`            | Array of watched invoice IDs                                              |
-| `toggleWatch`     | `(invoiceId) => void` | Add or remove an ID from the watchlist                                    |
-| `isWatched`       | `(invoiceId) => bool` | Check whether an ID is currently watched                                  |
-| `pruneWatchlist`  | `(validIds) => void`  | Remove IDs not in `validIds` — use after loading to clean stale references |
-
-#### Behaviour
-
-- Initialised as an empty array. After mount, the stored value is read from `localStorage` under `"liquifact:watchlist"`.
-- `toggleWatch(invoiceId)` adds the ID if absent and removes it if present.
-- `pruneWatchlist(validIds)` filters the watchlist to only include IDs present in the supplied array. Call this after loading invoices from the API to prune stale references to invoices that no longer exist.
-- All side-effects are safe for SSR (delegates to `useLocalStorage` which never reads or writes storage during render).
-- The returned object is memoised so it can be used in dependency arrays without causing infinite re-renders.
-
-#### Example
-
-```jsx
-'use client';
-
-import useWatchlist from "@/lib/hooks/useWatchlist";
-
-function InvoiceCard({ invoice }) {
-  const { watchlist, toggleWatch, isWatched } = useWatchlist();
-  const watched = isWatched(invoice.id);
-
-  return (
-    <div>
-      <button
-        type="button"
-        aria-pressed={watched}
-        aria-label={watched ? `Unstar invoice ${invoice.id}` : `Star invoice ${invoice.id}`}
-        onClick={() => toggleWatch(invoice.id)}
-      >
-        {watched ? "\u2605" : "\u2606"}
-      </button>
-      {/* invoice details */}
-    </div>
-  );
-}
-
-// Prune stale IDs after loading from API
-const { pruneWatchlist } = useWatchlist();
-useEffect(() => {
-  fetchInvoices().then((invoices) => {
-    setInvoices(invoices);
-    pruneWatchlist(invoices.map((inv) => inv.id));
-  });
-}, []);
-```
-
----
-
-### `WatchlistToggle`
-
-A toggle button that switches between "all invoices" and "watchlist only" views. Composes with the existing search and filter predicates — when watchlist-only is active, the current search + filter results are further narrowed to watched invoices.
-
-**File:** `components/InvoiceFilters.jsx` (named export `WatchlistToggle`)
-
-#### Props
-
-| Prop             | Type       | Default | Description                                                      |
-| ---------------- | ---------- | ------- | ---------------------------------------------------------------- |
-| `active`         | `boolean`  | —       | Whether watchlist-only mode is currently active                  |
-| `onToggle`       | `Function` | —       | Called with the next boolean value when the button is clicked    |
-| `watchlistCount` | `number`   | `0`     | Current number of watched invoices; shown as a badge when > 0    |
-
-#### Behaviour
-
-- Renders with `aria-pressed` to communicate the toggle state.
-- Displays a star icon (filled when active, outline when inactive).
-- When not active and `watchlistCount > 0`, shows a badge with the count.
-- Active state uses amber-300 text on amber-900/20 background for visual distinction.
-
-#### Accessibility
-
-- `aria-pressed` communicates toggle state to screen readers.
-- `aria-label` on the button reads `"Show all invoices"` or `"Show watchlist only"` depending on the current state.
-- The star icon SVG carries `aria-hidden="true"`.
-- `focus-visible:ring` for keyboard visibility.
-
-#### Integration in `app/invest/page.js`
-
-The toggle is rendered outside the disabled filter fieldset so it stays interactive. Watchlist filtering is applied in the `filteredInvoices` useMemo — when `watchlistOnly` is true, only invoices whose IDs are in the watchlist are shown.
-
-```jsx
-import { WatchlistToggle } from '@/components/InvoiceFilters';
-import useWatchlist from '@/lib/hooks/useWatchlist';
-
-function InvestMarketplace() {
-  const [watchlistOnly, setWatchlistOnly] = useState(false);
-  const { watchlist, isWatched, toggleWatch } = useWatchlist();
-
-  return (
-    <>
-      <WatchlistToggle
-        active={watchlistOnly}
-        onToggle={setWatchlistOnly}
-        watchlistCount={watchlist.length}
-      />
-      {invoices.map((inv) => (
-        <InvoiceCard
-          key={inv.id}
-          invoice={inv}
-          isWatched={isWatched(inv.id)}
-          onToggleWatch={toggleWatch}
-        />
-      ))}
-    </>
-  );
-}
-```
-
----
-
-### `InvoiceCard` — star toggle
-
-`InvoiceCard` optionally displays a star (watchlist) toggle button when the `onToggleWatch` callback is provided. The toggle button uses `aria-pressed` to communicate its state and includes the invoice reference in its accessible name.
-
-**File:** `components/InvoiceCard.jsx`
-
-#### Additional props
-
-| Prop           | Type       | Default | Description                                                        |
-| -------------- | ---------- | ------- | ------------------------------------------------------------------ |
-| `isWatched`    | `boolean`  | `false` | Whether this invoice is currently in the watchlist                 |
-| `onToggleWatch`| `Function` | —       | Called with the invoice ID when the star button is clicked. When omitted, the star button is not rendered. |
-
-#### Example with watchlist
-
-```jsx
-import InvoiceCard from '@/components/InvoiceCard';
-import useWatchlist from '@/lib/hooks/useWatchlist';
-
-function Marketplace() {
-  const { isWatched, toggleWatch } = useWatchlist();
-
-  return (
-    <ul>
-      {invoices.map((inv) => (
-        <li key={inv.id}>
-          <InvoiceCard
-            invoice={inv}
-            isWatched={isWatched(inv.id)}
-            onToggleWatch={toggleWatch}
-          />
-        </li>
-      ))}
-    </ul>
-  );
-}
 ```
 
 ---

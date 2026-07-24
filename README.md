@@ -48,9 +48,6 @@ and where wallet/toast/theme state lives.
 For the exact invoice fixture shape, formatted-versus-raw value rules, and the
 API migration seam, see the [Invoice data contract](docs/invoice-data.md).
 
-For the current invoice-detail route and action-component contract, see the
-[Invoice detail component contract](docs/invoice-detail.md).
-
 ---
 
 ## API Integration
@@ -814,7 +811,7 @@ PRs are grouped to limit noise:
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for the full contributor workflow, branch naming convention, local checks, and accessibility expectations. Also see our [Accessibility Statement](docs/accessibility.md) and our [Component Testing Guide](docs/testing.md).
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the full contributor workflow, branch naming convention, local checks, and accessibility expectations. Also see our [Accessibility Statement](docs/accessibility.md).
 
 1. **Fork** the repo and clone your fork.
 2. **Create a branch** from `main`: `git checkout -b feature/your-feature` or `fix/your-fix`.
@@ -896,11 +893,14 @@ The provider rehydrates from storage **after mount** (SSR-safe). `disconnect()` 
 
 **Props**
 
-The component currently accepts no props.
+| Prop            | Type       | Default            | Description                                      |
+| --------------- | ---------- | ------------------ | ------------------------------------------------ |
+| `walletLabel`   | `string`   | `'Connect Wallet'` | Label text rendered inside the wallet button     |
+| `onWalletClick` | `function` | `undefined`        | Callback fired when the wallet button is clicked |
 
 **Behaviour**
 
-- **Desktop (≥ `md` breakpoint):** Home, Invoices, and Invest links render inline in the header row alongside the network badge and lazy-loaded wallet UI.
+- **Desktop (≥ `md` breakpoint):** Home, Invoices, and Invest links render inline in the header row alongside the wallet button.
 - **Mobile (< `md` breakpoint):** Nav links are hidden behind a hamburger toggle (☰). Clicking the toggle reveals a dropdown menu below the header bar.
 - The active route is detected automatically via `usePathname` and marked with `aria-current="page"` on the matching link.
 - The menu closes on **Escape** (with focus returned to the toggle button), on any navigation event (pathname change), or when the toggle is clicked again.
@@ -911,6 +911,7 @@ The component currently accepts no props.
 ```jsx
 import NavMenu from "@/components/NavMenu";
 
+// Drop-in replacement for the static <header> on any page
 export default function MyPage() {
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
@@ -919,9 +920,10 @@ export default function MyPage() {
     </div>
   );
 }
-```
 
-For the full current contract and accessibility notes, see the [Navigation component contract](docs/navigation.md).
+// With Stellar wallet integration
+<NavMenu walletLabel="Freighter" onWalletClick={handleConnectWallet} />;
+```
 
 ## Design Tokens
 

@@ -1,9 +1,6 @@
 import "@testing-library/jest-dom";
-import { act, render, screen, fireEvent, within, waitFor } from "@testing-library/react";
-import { useCallback, useState } from "react";
+import { act, render, screen, fireEvent, within } from "@testing-library/react";
 import InvestPage, {
-  applySortToList,
-  deriveFilteredInvoices,
   getInvoiceLoadAnnouncement,
   getPaginationAnnouncement,
   InvestMarketplace,
@@ -48,7 +45,6 @@ function createPendingLoader() {
 async function flushTimers(delayMs = 0) {
   await act(async () => {
     jest.advanceTimersByTime(delayMs);
-    await Promise.resolve();
     await Promise.resolve();
   });
 }
@@ -97,7 +93,7 @@ describe("InvestMarketplace", () => {
     });
 
     expect(skeleton).toHaveAttribute("aria-busy", "true");
-    const status = screen.getByTestId("marketplace-status");
+    const status = screen.getByRole("status");
     expect(status).toHaveTextContent("");
     expect(status).toHaveAttribute("aria-live", "polite");
   });
@@ -143,15 +139,15 @@ describe("InvestMarketplace", () => {
 
     await flushTimers(100);
 
-    expect(screen.getByTestId("marketplace-status")).toHaveTextContent("3 investable invoices loaded");
+    expect(screen.getByRole("status")).toHaveTextContent("3 investable invoices loaded");
     expect(getInvoiceListItems()).toHaveLength(3);
-    expect(screen.getByTestId("marketplace-status")).toHaveAttribute("aria-live", "polite");
+    expect(screen.getByRole("status")).toHaveAttribute("aria-live", "polite");
     expect(loadInvoices).toHaveBeenCalledTimes(1);
 
     rerender(<InvestMarketplace loadInvoices={loadInvoices} />);
 
     expect(loadInvoices).toHaveBeenCalledTimes(1);
-    expect(screen.getByTestId("marketplace-status")).toHaveTextContent("3 investable invoices loaded");
+    expect(screen.getByRole("status")).toHaveTextContent("3 investable invoices loaded");
   });
 
   it("renders each invoice as a list item once the marketplace loads", async () => {
@@ -189,7 +185,7 @@ describe("InvestMarketplace", () => {
     render(<InvestMarketplace loadInvoices={createDeferredLoader([], 100)} />);
     await flushTimers(100);
 
-    const status = screen.getByTestId("marketplace-status");
+    const status = screen.getByRole("status");
     expect(status).toHaveTextContent("No invoices available");
     expect(status).toHaveAttribute("aria-live", "polite");
     expect(
@@ -203,7 +199,7 @@ describe("InvestMarketplace", () => {
     render(<InvestMarketplace loadInvoices={loadInvoices} />);
     await flushTimers(100);
 
-    const status = screen.getByTestId("marketplace-status");
+    const status = screen.getByRole("status");
     expect(status).toHaveTextContent("No invoices available");
     expect(status).toHaveAttribute("aria-live", "polite");
     expect(screen.queryByRole("listitem")).not.toBeInTheDocument();
@@ -223,7 +219,7 @@ describe("InvestMarketplace", () => {
     render(<InvestMarketplace loadInvoices={loadInvoices} />);
     await flushTimers(50);
 
-    const status = screen.getByTestId("marketplace-status");
+    const status = screen.getByRole("status");
     expect(status).toHaveTextContent("Unable to load investable invoices.");
     expect(status).toHaveAttribute("aria-live", "polite");
     expect(screen.getByRole("alert")).toHaveTextContent(
@@ -343,7 +339,7 @@ describe("InvestMarketplace", () => {
       await Promise.resolve();
     });
 
-    expect(screen.getByTestId("marketplace-status")).toHaveTextContent(
+    expect(screen.getByRole("status")).toHaveTextContent(
       `Showing ${total} of ${total} investable invoices`
     );
   });
@@ -736,49 +732,11 @@ describe("InvestMarketplace", () => {
     render(<InvestMarketplace loadInvoices={createDeferredLoader(invoices, 0)} />);
     await flushTimers(0);
 
-    expect(screen.getByTestId("marketplace-status")).toHaveTextContent("2 investable invoices loaded");
+    expect(screen.getByRole("status")).toHaveTextContent("2 investable invoices loaded");
 
     fireEvent.click(screen.getByLabelText("Filter by EUR"));
 
-    expect(screen.getByTestId("marketplace-status")).toHaveTextContent("1 of 2 invoices match");
-  });
-
-  it("filters invoices by status and restores them when status filters clear", async () => {
-    const invoices = [
-      {
-        id: "inv-001",
-        issuer: "A",
-        amount: "100",
-        currency: "USD",
-        dueDate: "2026-06-15",
-        yield: "5%",
-        status: "Open",
-      },
-      {
-        id: "inv-002",
-        issuer: "B",
-        amount: "200",
-        currency: "EUR",
-        dueDate: "2026-07-01",
-        yield: "6%",
-        status: "Funded",
-      },
-    ];
-
-    render(<InvestMarketplace loadInvoices={createDeferredLoader(invoices, 0)} />);
-    await flushTimers(0);
-
-    fireEvent.click(screen.getByRole("button", { name: "Funded" }));
-
-    expect(getInvoiceListItems()).toHaveLength(1);
-    expect(screen.getByText("B")).toBeInTheDocument();
-    expect(screen.queryByText("A")).not.toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: "Clear status filters" }));
-
-    expect(getInvoiceListItems()).toHaveLength(2);
-    expect(screen.getByText("A")).toBeInTheDocument();
-    expect(screen.getByText("B")).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("1 of 2 invoices match");
   });
 
   it("filters invoices by issuer search query after debounce", async () => {
@@ -806,65 +764,20 @@ describe("InvestMarketplace", () => {
     render(<InvestMarketplace loadInvoices={createDeferredLoader(invoices, 0)} />);
     await flushTimers(0);
 
-    expect(getInvoiceListItems()).toHaveLength(2);
+    expect(screen.getAllByRole("listitem")).toHaveLength(2);
 
     fireEvent.change(screen.getByLabelText("Search by issuer name"), {
       target: { value: "acme" },
     });
 
     // Before debounce runs, it should not filter yet
-    expect(getInvoiceListItems()).toHaveLength(2);
+    expect(screen.getAllByRole("listitem")).toHaveLength(2);
 
     await flushTimers(SEARCH_DEBOUNCE_MS);
 
-    expect(getInvoiceListItems()).toHaveLength(1);
+    expect(screen.getAllByRole("listitem")).toHaveLength(1);
     expect(screen.getByText("Acme Supplies Ltd")).toBeInTheDocument();
     expect(screen.queryByText("Bright Logistics GmbH")).not.toBeInTheDocument();
-  });
-
-  it("does not re-render visible invoice rows when the parent rerenders with unchanged props", async () => {
-    const renderCounts = new Map();
-    const tracker = jest.fn((id) => {
-      renderCounts.set(id, (renderCounts.get(id) ?? 0) + 1);
-    });
-
-    const invoices = makeInvoices(PAGE_SIZE + 2);
-    const loader = jest.fn().mockResolvedValue(invoices);
-
-    function Wrapper() {
-      const [tick, setTick] = useState(0);
-
-      return (
-        <div>
-          <button type="button" onClick={() => setTick((value) => value + 1)}>
-            Rerender parent
-          </button>
-          <InvestMarketplace loadInvoices={loader} rowRenderTracker={tracker} />
-        </div>
-      );
-    }
-
-    let getByRole;
-    await act(async () => {
-      const renderResult = render(<Wrapper />);
-      getByRole = renderResult.getByRole;
-      await Promise.resolve();
-    });
-
-    await waitFor(() => expect(renderCounts.size).toBe(PAGE_SIZE));
-    for (const count of renderCounts.values()) {
-      expect(count).toBe(1);
-    }
-
-    await act(async () => {
-      fireEvent.click(getByRole("button", { name: /Rerender parent/i }));
-      await Promise.resolve();
-    });
-
-    expect(renderCounts.size).toBe(PAGE_SIZE);
-    for (const count of renderCounts.values()) {
-      expect(count).toBe(1);
-    }
   });
 
   it("search is case-insensitive — lowercase query matches mixed-case issuer", async () => {
@@ -897,7 +810,7 @@ describe("InvestMarketplace", () => {
     });
     await flushTimers(SEARCH_DEBOUNCE_MS);
 
-    expect(getInvoiceListItems()).toHaveLength(1);
+    expect(screen.getAllByRole("listitem")).toHaveLength(1);
     expect(screen.getByText("Bright Logistics GmbH")).toBeInTheDocument();
     expect(screen.queryByText("Acme Supplies Ltd")).not.toBeInTheDocument();
   });
@@ -957,7 +870,7 @@ describe("InvestMarketplace", () => {
       target: { value: "acme" },
     });
     await flushTimers(SEARCH_DEBOUNCE_MS);
-    expect(getInvoiceListItems()).toHaveLength(1);
+    expect(screen.getAllByRole("listitem")).toHaveLength(1);
 
     // Clear the search filter
     fireEvent.change(screen.getByLabelText("Search by issuer name"), {
@@ -965,7 +878,7 @@ describe("InvestMarketplace", () => {
     });
     await flushTimers(SEARCH_DEBOUNCE_MS);
 
-    expect(getInvoiceListItems()).toHaveLength(2);
+    expect(screen.getAllByRole("listitem")).toHaveLength(2);
     expect(screen.getByText("Acme Supplies Ltd")).toBeInTheDocument();
     expect(screen.getByText("Bright Logistics GmbH")).toBeInTheDocument();
   });
@@ -1004,7 +917,7 @@ describe("InvestMarketplace", () => {
     render(<InvestMarketplace loadInvoices={createDeferredLoader(invoices, 0)} />);
     await flushTimers(0);
 
-    expect(screen.getByTestId("marketplace-status")).toHaveTextContent("3 investable invoices loaded");
+    expect(screen.getByRole("status")).toHaveTextContent("3 investable invoices loaded");
 
     fireEvent.change(screen.getByLabelText("Search by issuer name"), {
       target: { value: "acme" },
@@ -1012,7 +925,7 @@ describe("InvestMarketplace", () => {
     await flushTimers(SEARCH_DEBOUNCE_MS);
 
     // 2 of 3 invoices match "acme" (Acme Supplies Ltd and Acme Trading Co)
-    expect(screen.getByTestId("marketplace-status")).toHaveTextContent("2 of 3 invoices match");
+    expect(screen.getByRole("status")).toHaveTextContent("2 of 3 invoices match");
   });
 
   it("announces no-match when search produces zero results", async () => {
@@ -1036,7 +949,7 @@ describe("InvestMarketplace", () => {
     });
     await flushTimers(SEARCH_DEBOUNCE_MS);
 
-    expect(screen.getByTestId("marketplace-status")).toHaveTextContent("No invoices match");
+    expect(screen.getByRole("status")).toHaveTextContent("No invoices match");
   });
 
   it("search does not filter before debounce delay elapses", async () => {
@@ -1070,48 +983,11 @@ describe("InvestMarketplace", () => {
 
     // Advance less than debounce threshold — list should still be unfiltered
     await flushTimers(SEARCH_DEBOUNCE_MS - 50);
-    expect(getInvoiceListItems()).toHaveLength(2);
+    expect(screen.getAllByRole("listitem")).toHaveLength(2);
 
     // Now cross the threshold — filtering should kick in
     await flushTimers(50);
-    expect(getInvoiceListItems()).toHaveLength(1);
-  });
-
-  it("does not re-render invoice rows for unrelated search state before debounce", async () => {
-    const invoices = Array.from({ length: PAGE_SIZE + 5 }, (_, i) => ({
-      id: `inv-${String(i + 1).padStart(3, "0")}`,
-      issuer: i < 5 ? `Target Issuer ${i + 1}` : `Other Issuer ${i + 1}`,
-      amount: "1,000",
-      currency: "USD",
-      dueDate: "2026-12-31",
-      yield: "5.0%",
-      status: "Open",
-    }));
-    const onInvoiceRowRender = jest.fn();
-
-    render(
-      <InvestMarketplace
-        loadInvoices={createDeferredLoader(invoices, 0)}
-        onInvoiceRowRender={onInvoiceRowRender}
-      />
-    );
-    await flushTimers(0);
-
-    expect(getInvoiceListItems()).toHaveLength(PAGE_SIZE);
-    expect(onInvoiceRowRender).toHaveBeenCalledTimes(PAGE_SIZE);
-
-    fireEvent.change(screen.getByLabelText("Search by issuer name"), {
-      target: { value: "Target" },
-    });
-
-    expect(getInvoiceListItems()).toHaveLength(PAGE_SIZE);
-    expect(onInvoiceRowRender).toHaveBeenCalledTimes(PAGE_SIZE);
-
-    await flushTimers(SEARCH_DEBOUNCE_MS);
-
-    expect(getInvoiceListItems()).toHaveLength(5);
-    expect(screen.getByText("Target Issuer 1")).toBeInTheDocument();
-    expect(screen.queryByText("Other Issuer 6")).not.toBeInTheDocument();
+    expect(screen.getAllByRole("listitem")).toHaveLength(1);
   });
 
   it("announces filtered results in the live region when search is applied", async () => {
@@ -1139,11 +1015,11 @@ describe("InvestMarketplace", () => {
     render(<InvestMarketplace loadInvoices={createDeferredLoader(invoices, 0)} />);
     await flushTimers(0);
 
-    expect(screen.getByTestId("marketplace-status")).toHaveTextContent("2 investable invoices loaded");
+    expect(screen.getByRole("status")).toHaveTextContent("2 investable invoices loaded");
 
     fireEvent.click(screen.getByLabelText("Filter by EUR"));
 
-    expect(screen.getByTestId("marketplace-status")).toHaveTextContent("1 of 2 invoices match");
+    expect(screen.getByRole("status")).toHaveTextContent("1 of 2 invoices match");
   });
 
   // ── Retry / error recovery tests ──────────────────────────────────────────
@@ -1197,7 +1073,7 @@ describe("InvestMarketplace", () => {
 
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     expect(getInvoiceListItems()).toHaveLength(2);
-    expect(screen.getByTestId("marketplace-status")).toHaveTextContent("2 investable invoices loaded");
+    expect(screen.getByRole("status")).toHaveTextContent("2 investable invoices loaded");
   });
 
   it("retry-then-failure: shows error banner again after a second failure", async () => {
@@ -1362,7 +1238,7 @@ describe("InvestMarketplace renders from shared lib.js fixture", () => {
     render(<InvestMarketplace loadInvoices={loadMockInvoices} />);
     await flushTimers(0);
 
-    expect(screen.getByTestId("marketplace-status")).toHaveTextContent(
+    expect(screen.getByRole("status")).toHaveTextContent(
       `${MOCK_INVOICES.length} investable invoices loaded`
     );
   });
@@ -1402,62 +1278,6 @@ describe("InvestMarketplace renders from shared lib.js fixture", () => {
   it("getInvoiceById returns undefined for an id that does not exist in the shared fixture", () => {
     expect(getInvoiceById("inv-not-in-fixture")).toBeUndefined();
   });
-
-  describe("visually-styled live region count announcements", () => {
-    it("announces zero results when no invoices match filters", async () => {
-      const invoices = makeInvoices(3);
-      render(<InvestMarketplace loadInvoices={createDeferredLoader(invoices, 0)} />);
-      await flushTimers(0);
-
-      fireEvent.change(screen.getByLabelText("Search by issuer name"), {
-        target: { value: "nonexistent" },
-      });
-      await flushTimers(SEARCH_DEBOUNCE_MS);
-
-      expect(screen.getByRole("status")).toHaveTextContent("No invoices match");
-    });
-
-    it("announces single result correctly", async () => {
-      const invoices = [
-        {
-          id: "inv-001",
-          issuer: "Unique Corp",
-          amount: "1,000",
-          currency: "USD",
-          dueDate: "2026-12-31",
-          yield: "5.0%",
-          status: "Open",
-        },
-      ];
-      render(<InvestMarketplace loadInvoices={createDeferredLoader(invoices, 0)} />);
-      await flushTimers(0);
-
-      expect(screen.getByRole("status")).toHaveTextContent("1 investable invoices loaded");
-    });
-
-    it("debounces rapid successive changes in search input", async () => {
-      const invoices = makeInvoices(5);
-      render(<InvestMarketplace loadInvoices={createDeferredLoader(invoices, 0)} />);
-      await flushTimers(0);
-
-      const searchInput = screen.getByLabelText("Search by issuer name");
-
-      // Rapidly type "i", then "is", then "iss"
-      fireEvent.change(searchInput, { target: { value: "i" } });
-      jest.advanceTimersByTime(100);
-      expect(screen.getByRole("status")).toHaveTextContent("5 investable invoices loaded");
-
-      fireEvent.change(searchInput, { target: { value: "is" } });
-      jest.advanceTimersByTime(100);
-      expect(screen.getByRole("status")).toHaveTextContent("5 investable invoices loaded");
-
-      fireEvent.change(searchInput, { target: { value: "iss" } });
-
-      await flushTimers(SEARCH_DEBOUNCE_MS);
-
-      expect(screen.getByRole("status")).toHaveTextContent("5 of 5 invoices match");
-    });
-  });
 });
 
 describe("lib helpers", () => {
@@ -1469,135 +1289,6 @@ describe("lib helpers", () => {
   it("loads all mock invoices", async () => {
     const invoices = await loadMockInvoices();
     expect(invoices).toHaveLength(3);
-  });
-});
-
-describe("deriveFilteredInvoices", () => {
-  const filters = {
-    yieldMin: "",
-    yieldMax: "",
-    currency: "",
-    maturityFrom: "",
-    maturityTo: "",
-    sort: "",
-    sortDir: "desc",
-    statuses: [],
-  };
-
-  it("handles a large dataset and updates when filters change", () => {
-    const invoices = Array.from({ length: 500 }, (_, i) => ({
-      id: `large-${i + 1}`,
-      issuer: i % 25 === 0 ? `Needle Corp ${i}` : `Issuer ${i}`,
-      amount: `${1_000 + i}`,
-      currency: i % 2 === 0 ? "USD" : "EUR",
-      dueDate: `2026-12-${String((i % 28) + 1).padStart(2, "0")}`,
-      yield: `${4 + (i % 8)}.0%`,
-      status: i % 3 === 0 ? "Funded" : "Open",
-    }));
-
-    expect(deriveFilteredInvoices(invoices, "", filters)).toHaveLength(500);
-
-    const filtered = deriveFilteredInvoices(invoices, "needle", {
-      ...filters,
-      currency: "USD",
-      yieldMin: "8",
-      statuses: ["Open"],
-    });
-
-    expect(filtered).toHaveLength(2);
-    expect(filtered.every((invoice) => invoice.issuer.toLowerCase().includes("needle"))).toBe(
-      true
-    );
-    expect(filtered.every((invoice) => invoice.currency === "USD")).toBe(true);
-    expect(filtered.every((invoice) => invoice.status === "Open")).toBe(true);
-    expect(filtered.every((invoice) => parseFloat(invoice.yield) >= 8)).toBe(true);
-  });
-
-  it("covers yield maximum and maturity-to filters", () => {
-    const invoices = [
-      {
-        id: "early-low",
-        issuer: "Early Low",
-        amount: "100",
-        currency: "USD",
-        dueDate: "2026-06-01",
-        yield: "4%",
-        status: "Open",
-      },
-      {
-        id: "late-high",
-        issuer: "Late High",
-        amount: "200",
-        currency: "USD",
-        dueDate: "2026-08-01",
-        yield: "9%",
-        status: "Open",
-      },
-    ];
-
-    const filtered = deriveFilteredInvoices(invoices, "", {
-      ...filters,
-      yieldMax: "5",
-      maturityTo: "2026-07-01",
-    });
-
-    expect(filtered.map((invoice) => invoice.id)).toEqual(["early-low"]);
-  });
-});
-
-describe("applySortToList", () => {
-  const filters = {
-    yieldMin: "",
-    yieldMax: "",
-    currency: "",
-    maturityFrom: "",
-    maturityTo: "",
-    sort: "",
-    sortDir: "desc",
-    statuses: [],
-  };
-
-  const invoices = [
-    {
-      id: "middle",
-      amount: "200",
-      dueDate: "2026-07-01",
-      yield: "7%",
-    },
-    {
-      id: "low",
-      amount: "100",
-      dueDate: "2026-06-01",
-      yield: "5%",
-    },
-    {
-      id: "high",
-      amount: "300",
-      dueDate: "2026-08-01",
-      yield: "9%",
-    },
-  ];
-
-  it("returns non-array and empty inputs unchanged", () => {
-    expect(applySortToList(null, filters)).toBeNull();
-    const empty = [];
-    expect(applySortToList(empty, filters)).toBe(empty);
-  });
-
-  it("returns the original list when no sort column is selected", () => {
-    expect(applySortToList(invoices, filters)).toBe(invoices);
-  });
-
-  it("sorts by amount, yield, and maturity", () => {
-    expect(applySortToList(invoices, { ...filters, sort: "amount", sortDir: "asc" }).map(
-      (invoice) => invoice.id
-    )).toEqual(["low", "middle", "high"]);
-    expect(applySortToList(invoices, { ...filters, sort: "yield", sortDir: "desc" }).map(
-      (invoice) => invoice.id
-    )).toEqual(["high", "middle", "low"]);
-    expect(applySortToList(invoices, { ...filters, sort: "maturity", sortDir: "asc" }).map(
-      (invoice) => invoice.id
-    )).toEqual(["low", "middle", "high"]);
   });
 });
 

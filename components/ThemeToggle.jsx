@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
 /**
  * The three theme options the user can cycle through.
@@ -101,16 +101,14 @@ export default function ThemeToggle({ className = "" }) {
     return () => mq.removeEventListener("change", handler);
   }, [preference]);
 
-  const handleClick = useCallback(() => {
+  const handleClick = () => {
     setPreference((prev) => {
       const idx = THEMES.indexOf(prev);
       return THEMES[(idx + 1) % THEMES.length];
     });
-  }, []);
+  };
 
-  // ICONS and LABELS are static — defined outside the component would work too,
-  // but useMemo keeps them co-located and documents the intent clearly.
-  const ICONS = useMemo(() => ({
+  const ICONS = {
     light: (
       // Sun
       <svg
@@ -172,13 +170,13 @@ export default function ThemeToggle({ className = "" }) {
         <line x1="12" y1="17" x2="12" y2="21" />
       </svg>
     ),
-  }), []);
+  };
 
-  const LABELS = useMemo(() => ({
+  const LABELS = {
     light: "Theme: Light (click for Dark)",
     dark: "Theme: Dark (click for System)",
     system: "Theme: System (click for Light)",
-  }), []);
+  };
 
   const nextPref = THEMES[(THEMES.indexOf(preference) + 1) % THEMES.length];
   const capitalise = (s) => s.charAt(0).toUpperCase() + s.slice(1);
