@@ -21,13 +21,26 @@ const STATUS_STYLES = {
 
 function mergeInvoices(optimisticInvoices, loadedInvoices) {
   const mergedById = new Map();
-  (optimisticInvoices ?? []).forEach((invoice) => mergedById.set(invoice.id, invoice));
-  (loadedInvoices ?? []).forEach((invoice) => {
-    if (!mergedById.has(invoice.id)) mergedById.set(invoice.id, invoice);
+
+  (optimisticInvoices ?? []).forEach((invoice) => {
+    mergedById.set(invoice.id, invoice);
   });
+
+  (loadedInvoices ?? []).forEach((invoice) => {
+    if (!mergedById.has(invoice.id)) {
+      mergedById.set(invoice.id, invoice);
+    }
+  });
+
   return Array.from(mergedById.values());
 }
 
+/**
+ * Given a number of days until (-) or since (+) maturity, return the
+ * appropriate badge label and styling class.
+ * @param {number} days - Days until maturity (negative = overdue, 0 = today, positive = future)
+ * @returns {{ label: string, className: string }}
+ */
 export function getMaturityBadgeProps(days) {
   if (days < 0) {
     const abs = Math.abs(days);
@@ -48,6 +61,17 @@ export function getMaturityBadgeProps(days) {
   };
 }
 
+/**
+ * InvoiceList Component
+ *
+ * Presentational component that renders a list of invoices.
+ * Merges loaded invoices with optimistic updates from the upload flow.
+ * Handles its own empty state display.
+ *
+ * @param {Object} props
+ * @param {Array} [props.invoices=[]] - List of invoices loaded from the API.
+ * @param {Array} [props.optimisticInvoices=[]] - List of invoices recently uploaded but not yet in the API.
+ */
 export default function InvoiceList({ invoices = [], optimisticInvoices = [] }) {
   const mergedInvoices = useMemo(
     () => mergeInvoices(optimisticInvoices, invoices),
@@ -61,9 +85,7 @@ export default function InvoiceList({ invoices = [], optimisticInvoices = [] }) 
           <h2 id="invoice-list-heading" className="text-xl font-semibold text-slate-100">
             Your invoices
           </h2>
-          <p className="text-sm text-slate-400">
-            Track tokenization progress for uploaded documents.
-          </p>
+          <p className="text-sm text-slate-400">Track tokenization progress for uploaded documents.</p>
         </div>
       </div>
 
@@ -71,7 +93,10 @@ export default function InvoiceList({ invoices = [], optimisticInvoices = [] }) 
         <EmptyState
           icon={<InvoiceEmptyIllustration />}
           title="No invoices yet"
-          description={copy.invoices.emptyState || "Upload your first invoice to get started."}
+          description={
+            copy.invoices.emptyState ||
+            "Upload your first invoice to get started. It will appear here once tokenized."
+          }
           action={
             <a
               href="#invoice-upload-btn"
@@ -85,9 +110,7 @@ export default function InvoiceList({ invoices = [], optimisticInvoices = [] }) 
         <ul className="space-y-4">
           {mergedInvoices.map((invoice) => {
             const statusValue =
-              invoice.status in STATUS_STYLES
-                ? invoice.status
-                : INVOICE_STATUSES.PENDING_TOKENIZATION;
+              invoice.status in STATUS_STYLES ? invoice.status : INVOICE_STATUSES.PENDING_TOKENIZATION;
             return (
               <li key={invoice.id} className="rounded-3xl border border-slate-800 bg-slate-900/50 p-5 shadow-sm">
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -95,14 +118,21 @@ export default function InvoiceList({ invoices = [], optimisticInvoices = [] }) 
                     <p className="text-sm font-medium uppercase tracking-[0.14em] text-slate-500">Invoice</p>
                     <p className="mt-2 text-lg font-semibold text-slate-100">{invoice.issuer}</p>
                   </div>
-                  <span className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] ${STATUS_STYLES[statusValue]}`}>
+                  <span
+                    className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] ${
+                      STATUS_STYLES[statusValue]
+                    }`}
+                  >
                     {statusValue}
                   </span>
                 </div>
+
                 <dl className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                   <div>
                     <dt className="text-xs uppercase tracking-[0.24em] text-slate-500">Amount</dt>
-                    <dd className="mt-2 text-sm text-slate-200">{invoice.currency} {invoice.amount}</dd>
+                    <dd className="mt-2 text-sm text-slate-200">
+                      {invoice.currency} {invoice.amount}
+                    </dd>
                   </div>
                   <div>
                     <dt className="text-xs uppercase tracking-[0.24em] text-slate-500">Estimated yield</dt>
