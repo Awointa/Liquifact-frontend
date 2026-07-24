@@ -9,8 +9,12 @@ import { copy } from "../app/copy/en";
 
 /**
  * UploadView Component
+ *
  * Orchestrates the invoice upload experience by managing the fetch-state model
  * for existing invoices while providing the UploadZone for new submissions.
+ *
+ * Implements mutually exclusive states for loading, error, and empty views
+ * with accessible announcements and a keyboard-operable retry re-fetch.
  */
 export default function UploadView({ loadInvoices }) {
   const [invoices, setInvoices] = useState(null); // null = loading
@@ -18,6 +22,9 @@ export default function UploadView({ loadInvoices }) {
   const [retryKey, setRetryKey] = useState(0);
   const [optimisticInvoices, setOptimisticInvoices] = useState([]);
 
+  /**
+   * Resets error/loading state and re-runs the load effect.
+   */
   const reload = () => {
     setInvoices(null);
     setLoadError("");
@@ -44,6 +51,7 @@ export default function UploadView({ loadInvoices }) {
         setInvoices(normalized);
       } catch (error) {
         if (!isActive || error.name === "AbortError") return;
+
         setLoadError(copy.invoices.errorDescription || "Unable to load invoices.");
         setInvoices([]);
       }
@@ -59,10 +67,10 @@ export default function UploadView({ loadInvoices }) {
   const statusMessage = useMemo(() => {
     if (loadError) return copy.invoices.errorStatus || "Unable to load invoices.";
     if (invoices === null) return "Loading invoices...";
-    
+
     const totalCount = (invoices?.length || 0) + optimisticInvoices.length;
     if (totalCount === 0) return copy.invoices.emptyState || "No invoices yet.";
-    
+
     return `${totalCount} invoice${totalCount === 1 ? "" : "s"} available.`;
   }, [invoices, loadError, optimisticInvoices]);
 
@@ -95,10 +103,7 @@ export default function UploadView({ loadInvoices }) {
             <InvoiceListSkeleton rows={3} />
           </div>
         ) : (
-          <InvoiceList 
-            invoices={invoices || []} 
-            optimisticInvoices={optimisticInvoices} 
-          />
+          <InvoiceList invoices={invoices || []} optimisticInvoices={optimisticInvoices} />
         )}
       </div>
     </div>
