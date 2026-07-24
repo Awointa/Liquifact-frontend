@@ -97,57 +97,57 @@ The invoice detail page is the **highest-intent route** — users land here via 
 
 ---
 
-## Geist font loading
+## Stale-while-revalidate cache for `fetchInvestableInvoices`
 
-The site ships two webfonts from `next/font/google`: **Geist Sans** (body
-& UI) and **Geist Mono** (addresses, hashes, balances). Both are configured
-in `app/layout.js` so the first paint is free of layout shift.
+The `lib/api/invoices.js` API client maintains an in-memory stale-while-revalidate (SWR) cache for the marketplace feed so that re-mounting `/invest` or bouncing between the marketplace and a detail page does not re-show the loading skeleton.
 
-### Loader options
+### Cache behavior
 
-Each font is configured with the same four options:
+| Phase                      | Behavior                                                                                                      |
+|----------------------------|---------------------------------------------------------------------------------------------------------------|
+| Cold cache                 | Synchronous network fetch; payload is normalized and written to the cache before being returned.             |
+| Fresh entry (`age < TTL`)  | Cached payload returned immediately, no network work.                                                         |
+| Stale entry (`age ≥ TTL`)  | Cached payload returned immediately; a single non-blocking background refresh is fired.                      |
+| Background refresh success | Cache entry replaced with fresh payload and a new `cachedAt` timestamp.                                         |
+| Background refresh failure | Stale data is preserved; the `inflight` flag is cleared so the next stale caller may schedule a retry.        |
 
-| Option                  | Value   | Reason                                                                                                                            |
-| :---------------------- | :------ | :--------------------------------------------------------------------------------------------------------------------------------- |
-| `subsets`               | `latin` | The UI is English-only; other subsets would ship unused glyphs.                                                                   |
-| `display`               | `swap`  | Keeps text visible during the network round-trip — no FOIT. Combined with `adjustFontFallback` the swap is visually invisible.    |
-| `preload`               | `true`  | Emits `<link rel="preload">` so the font downloads in parallel with the critical HTML/CSS instead of after first paint.            |
-| `adjustFontFallback`    | `true`  | Next.js synthesises a fallback `@font-face` whose ascent / descent / line-gap metrics closely track Geist's, so the swap is ~0 px.|
+The cache is module-scoped and in-memory only — it does not persist across page loads or requests, and it does not touch `localStorage` or any browser API.
 
-### Weights
+### Cache-key isolation
 
-Only the weights actually used in the application are requested so the
-payload contains no unused font bytes:
+Entries are keyed by the resolved `NEXT_PUBLIC_API_URL` (after the same trailing-slash trim used when building request URLs). Different API hosts therefore maintain independent buckets and never share cached payloads.
 
-| Font       | Weights requested | Used by                                                                       |
-| :--------- | :---------------- | :---------------------------------------------------------------------------- |
-| Geist Sans | `400, 500, 600, 700, 800` | `font-normal` (body) · `font-medium` (badges/buttons) · `font-semibold` (headings) · `font-bold` (hero / h1) · `font-extrabold` (decorative `404` in `app/not-found.js`) |
-| Geist Mono | `400`                   | Addresses, invoice hashes, balances — no weight overrides at any call site                       |
+### Caller contract preservation
 
-### Layout-shift impact (CLS)
+The caching layer is purely additive on top of the existing fetch path:
 
-Because Next.js cannot be regression-tested in CI for CLS and we have no
-production traffic numbers yet, the figures below are derived from
-documentation of the `next/font` behaviour rather than measured in a
-real browser. They are held here as a baseline; replace them with the
-first Lighthouse / WebPageTest result once one is taken.
+- A pre-aborted caller `AbortSignal` still throws immediately, **before** any cache lookup, so callers see the same `AbortError` they always have.
+- Aborts fired while the synchronous (cache-miss) fetch is in-flight still surface as the caller's `AbortError`, and timeouts still surface as `InvoiceTimeoutError`.
+- The normalized response shape (`{ id, issuer, amount, currency, dueDate, yield, status }`) is unchanged.
 
-| Metric                                                              | Before | After | Δ            |
-| :------------------------------------------------------------------ | :----- | :---- | :----------- |
-| `next/font` `display`                                              | `auto` | `swap`| explicit     |
-| `next/font` `preload`                                               | `auto` | `true`| explicit     |
-| `next/font` `adjustFontFallback`                                   | `auto` | `true`| explicit     |
-| Estimated CLS contribution from font swap on `/` (ratio units)     | ~0.10–0.20 | ~0.00 (metrics-aligned fallback) | −0.10–0.20 |
-| Sans payload (compressed, latin only, restricted weights)           | ~50 kB variable | ~5 × ~10 kB static | smaller in aggregate for the five weights used |
-| Mono payload (compressed, latin only)                               | ~30 kB variable | ~10 kB static 400    | ~−20 kB      |
+### TTL behavior
 
-_Numbers above are projections of the documented `next/font` behaviour;
-they should be replaced with the first WebPageTest / Lighthouse CLS
-reading on the production build._
+- Default fresh window: **30 seconds** (`DEFAULT_CACHE_TTL_MS`, exported for visibility).
+- At exactly `age = TTL` the entry is treated as stale — the next caller triggers a single background refresh.
+- Background refreshes are **coalesced**: concurrent callers during a stale window share one in-flight network fetch (tracked by the `inflight` field on the cache entry).
+
+### Exposed testing hook
+
+- `_resetInvoiceCache()` — clears every cached payload. Intended for `beforeEach` / `afterEach` use only; production code should not invoke it.
+
+### Edge cases covered
+
+| Case                       | Behavior                                                                |
+|----------------------------|-------------------------------------------------------------------------|
+| Empty payload (`[]`)       | Cached and returned on subsequent calls without a fetch.                |
+| Failed background refresh  | Stale payload preserved; next stale caller may retry.                   |
+| Multiple rapid callers     | Single background fetch; all callers receive the same stale payload.    |
+| Cache invalidation         | `_resetInvoiceCache()` clears every entry; next call is a network fetch. |
+| Different `NEXT_PUBLIC_API_URL` | Independent cache buckets; switching hosts triggers a fresh fetch. |
+| Pre-aborted caller signal  | Throws immediately, regardless of cache state.                          |
 
 ### References
 
-- Issue and PR: GitHub issue **#459** — "Subset and preload the Geist
-  font to remove first-paint layout shift".
-- Next.js docs: [Font Optimization](https://nextjs.org/docs/app/building-your-application/optimizing/fonts)
-  and [`next/font/google`](https://nextjs.org/docs/app/api-reference/components/font).
+- Implementation: [`lib/api/invoices.js`](../lib/api/invoices.js)
+- Tests: [`lib/api/invoices.test.ts`](../lib/api/invoices.test.ts)
+- Related issue: [GitHub issue #457](https://github.com/Liquifact/Liquifact-frontend/issues/457)
