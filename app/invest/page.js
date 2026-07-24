@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import ErrorBanner from "@/components/ErrorBanner";
@@ -57,6 +57,41 @@ export function getPaginationAnnouncement(shown, total) {
     .replace("{shown}", shown)
     .replace("{total}", total);
 }
+
+const InvestInvoiceRow = memo(function InvestInvoiceRow({ invoice, rowRenderTracker }) {
+  rowRenderTracker?.(invoice.id);
+
+  return (
+    <li className="rounded-xl border border-slate-800 bg-slate-900/50 p-5">
+      <div className="flex items-center justify-between mb-3">
+        <Link
+          href={`/invest/${invoice.id}`}
+          className="font-medium text-slate-100 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-400 rounded"
+        >
+          {invoice.issuer}
+        </Link>
+        <span className="text-xs font-semibold px-2 py-1 rounded-full bg-cyan-900/60 text-cyan-300">
+          {invoice.status}
+        </span>
+      </div>
+      <div className="flex gap-6 text-sm text-slate-400">
+        <span>
+          {invoice.currency}&nbsp;{invoice.amount}
+        </span>
+        <span>
+          {copy.invest.labelYield}
+          {invoice.yield}
+        </span>
+        <span>
+          {copy.invest.labelMaturity}
+          {invoice.dueDate}
+        </span>
+      </div>
+    </li>
+  );
+});
+
+export { InvestInvoiceRow };
 
 /**
  * Parse a numeric amount string like "12,500" → 12500.
@@ -277,9 +312,8 @@ export const InvoiceListItem = memo(function InvoiceListItem({ invoice }) {
  * @param {Function} [props.onInvoiceRowRender] - Test-only render instrumentation.
  * @returns {JSX.Element}
  */
-export function InvestMarketplace({ loadInvoices = loadMockInvoices, onInvoiceRowRender }) {
+export function InvestMarketplace({ loadInvoices = loadMockInvoices, rowRenderTracker }) {
   const searchParams = useSearchParams();
-  const searchParamsValue = searchParams ?? new URLSearchParams();
 
   const [invoices, setInvoices] = useState(null); // null = loading
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
@@ -353,7 +387,23 @@ export function InvestMarketplace({ loadInvoices = loadMockInvoices, onInvoiceRo
     [invoices, debouncedSearch, filters]
   );
 
-  const filterActive = hasAnyActiveFilters(filters, debouncedSearch);
+  const visibleInvoices = useMemo(
+    () => filteredInvoices.slice(0, visibleCount),
+    [filteredInvoices, visibleCount]
+  );
+
+  const invoiceRows = useMemo(
+    () =>
+      visibleInvoices.map((inv) => (
+        <InvestInvoiceRow key={inv.id} invoice={inv} rowRenderTracker={rowRenderTracker} />
+      )),
+    [visibleInvoices, rowRenderTracker]
+  );
+
+  const filterActive = useMemo(
+    () => hasAnyActiveFilters(filters, debouncedSearch),
+    [filters, debouncedSearch]
+  );
 
   /** Removes a single active filter or the search term (toolbar chip "×"). */
   const handleRemoveFilter = useCallback((clearKey) => {
@@ -592,9 +642,7 @@ export function InvestMarketplace({ loadInvoices = loadMockInvoices, onInvoiceRo
         ) : (
           <>
             <ul aria-label={copy.invest.listAriaLabel} className="space-y-4">
-              {visibleInvoices.map((inv) => (
-                <InvoiceListItem key={inv.id} invoice={inv} />
-              ))}
+              {invoiceRows}
             </ul>
             {visibleCount < filteredInvoices.length && (
               <button
