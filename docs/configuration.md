@@ -25,6 +25,7 @@ This document is the **single authoritative reference** for every environment va
 - **Type:** URL string
 - **Default:** `http://localhost:3001`
 - **Accepted values:** Any valid absolute URL (e.g. `https://api.liquifact.io`)
+- **Normalization & Fallbacks:** Trims leading/trailing whitespace, strips single or multiple trailing slashes, and falls back to `http://localhost:3001` if unset, empty, or whitespace-only.
 - **Required:** Optional. Without this variable the app falls back to `http://localhost:3001`, which is correct for local development but will fail in production if the API is hosted elsewhere.
 - **Breaking behaviour if missing in production:** Invoice listing, detail pages, and all data-fetching routes return errors or empty states.
 
