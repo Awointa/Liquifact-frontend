@@ -764,18 +764,18 @@ describe("InvestMarketplace", () => {
     render(<InvestMarketplace loadInvoices={createDeferredLoader(invoices, 0)} />);
     await flushTimers(0);
 
-    expect(screen.getAllByRole("listitem")).toHaveLength(2);
+    expect(getInvoiceListItems()).toHaveLength(2);
 
     fireEvent.change(screen.getByLabelText("Search by issuer name"), {
       target: { value: "acme" },
     });
 
     // Before debounce runs, it should not filter yet
-    expect(screen.getAllByRole("listitem")).toHaveLength(2);
+    expect(getInvoiceListItems()).toHaveLength(2);
 
     await flushTimers(SEARCH_DEBOUNCE_MS);
 
-    expect(screen.getAllByRole("listitem")).toHaveLength(1);
+    expect(getInvoiceListItems()).toHaveLength(1);
     expect(screen.getByText("Acme Supplies Ltd")).toBeInTheDocument();
     expect(screen.queryByText("Bright Logistics GmbH")).not.toBeInTheDocument();
   });
@@ -810,7 +810,7 @@ describe("InvestMarketplace", () => {
     });
     await flushTimers(SEARCH_DEBOUNCE_MS);
 
-    expect(screen.getAllByRole("listitem")).toHaveLength(1);
+    expect(getInvoiceListItems()).toHaveLength(1);
     expect(screen.getByText("Bright Logistics GmbH")).toBeInTheDocument();
     expect(screen.queryByText("Acme Supplies Ltd")).not.toBeInTheDocument();
   });
@@ -870,7 +870,7 @@ describe("InvestMarketplace", () => {
       target: { value: "acme" },
     });
     await flushTimers(SEARCH_DEBOUNCE_MS);
-    expect(screen.getAllByRole("listitem")).toHaveLength(1);
+    expect(getInvoiceListItems()).toHaveLength(1);
 
     // Clear the search filter
     fireEvent.change(screen.getByLabelText("Search by issuer name"), {
@@ -878,7 +878,7 @@ describe("InvestMarketplace", () => {
     });
     await flushTimers(SEARCH_DEBOUNCE_MS);
 
-    expect(screen.getAllByRole("listitem")).toHaveLength(2);
+    expect(getInvoiceListItems()).toHaveLength(2);
     expect(screen.getByText("Acme Supplies Ltd")).toBeInTheDocument();
     expect(screen.getByText("Bright Logistics GmbH")).toBeInTheDocument();
   });
@@ -983,11 +983,11 @@ describe("InvestMarketplace", () => {
 
     // Advance less than debounce threshold — list should still be unfiltered
     await flushTimers(SEARCH_DEBOUNCE_MS - 50);
-    expect(screen.getAllByRole("listitem")).toHaveLength(2);
+    expect(getInvoiceListItems()).toHaveLength(2);
 
     // Now cross the threshold — filtering should kick in
     await flushTimers(50);
-    expect(screen.getAllByRole("listitem")).toHaveLength(1);
+    expect(getInvoiceListItems()).toHaveLength(1);
   });
 
   it("announces filtered results in the live region when search is applied", async () => {

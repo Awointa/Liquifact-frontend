@@ -7,8 +7,10 @@ import ErrorBanner from "@/components/ErrorBanner";
 import InvoiceListSkeleton from "@/components/InvoiceListSkeleton";
 import InvoiceSearch from "@/components/InvoiceSearch";
 import InvoiceFilters, {
+  ActiveFilterSummary,
   DEFAULT_FILTERS,
   StatusLegendFilter,
+  clearFilterByKey,
   hasAnyActiveFilters,
   parseSortState,
 } from "@/components/InvoiceFilters";
@@ -101,6 +103,47 @@ export function applySortToList(list, filters) {
 }
 
 /**
+ * Filters and sorts the raw invoice list per the current search term and
+ * structured filters. Pure function — no component state — so it can be
+ * unit-tested directly and reused by the memoized computation below.
+ *
+ * @param {Array}  invoices
+ * @param {string} searchQuery
+ * @param {object} filters
+ * @returns {Array}
+ */
+export function filterInvoices(invoices, searchQuery, filters) {
+  if (!Array.isArray(invoices)) return [];
+  let list = invoices;
+
+  if (searchQuery.trim()) {
+    const q = searchQuery.toLowerCase();
+    list = list.filter((inv) => inv.issuer?.toLowerCase().includes(q));
+  }
+  if (filters.currency) {
+    list = list.filter((inv) => inv.currency === filters.currency);
+  }
+  if (filters.yieldMin !== "") {
+    const min = parseFloat(filters.yieldMin);
+    list = list.filter((inv) => parseYield(inv.yield) >= min);
+  }
+  if (filters.yieldMax !== "") {
+    const max = parseFloat(filters.yieldMax);
+    list = list.filter((inv) => parseYield(inv.yield) <= max);
+  }
+  if (filters.maturityFrom) {
+    list = list.filter((inv) => inv.dueDate >= filters.maturityFrom);
+  }
+  if (filters.maturityTo) {
+    list = list.filter((inv) => inv.dueDate <= filters.maturityTo);
+  }
+  if (Array.isArray(filters.statuses) && filters.statuses.length > 0) {
+    list = list.filter((inv) => filters.statuses.includes(inv.status));
+  }
+  return applySortToList(list, filters);
+}
+
+/**
  * InvestMarketplace – main component for the invest page.
  *
  * Fetches invoices via `loadInvoices`, renders them PAGE_SIZE at a time,
@@ -146,6 +189,9 @@ export function InvestMarketplace({ loadInvoices = loadMockInvoices }) {
 
   /** Ref forwarded to the "Load more" button for focus management. */
   const loadMoreRef = useRef(null);
+
+  /** Ref forwarded to the search input so "Clear all" can return focus to it. */
+  const searchInputRef = useRef(null);
 
   /**
    * Resets error/loading state and re-runs the load effect.
@@ -196,38 +242,39 @@ export function InvestMarketplace({ loadInvoices = loadMockInvoices }) {
   }
 
   // Filtered + sorted invoice list
-  const filteredInvoices = useMemo(() => {
-    if (!Array.isArray(invoices)) return [];
-    let list = invoices;
-
-    if (debouncedSearch.trim()) {
-      const q = debouncedSearch.toLowerCase();
-      list = list.filter((inv) => inv.issuer?.toLowerCase().includes(q));
-    }
-    if (filters.currency) {
-      list = list.filter((inv) => inv.currency === filters.currency);
-    }
-    if (filters.yieldMin !== "") {
-      const min = parseFloat(filters.yieldMin);
-      list = list.filter((inv) => parseYield(inv.yield) >= min);
-    }
-    if (filters.yieldMax !== "") {
-      const max = parseFloat(filters.yieldMax);
-      list = list.filter((inv) => parseYield(inv.yield) <= max);
-    }
-    if (filters.maturityFrom) {
-      list = list.filter((inv) => inv.dueDate >= filters.maturityFrom);
-    }
-    if (filters.maturityTo) {
-      list = list.filter((inv) => inv.dueDate <= filters.maturityTo);
-    }
-    if (Array.isArray(filters.statuses) && filters.statuses.length > 0) {
-      list = list.filter((inv) => filters.statuses.includes(inv.status));
-    }
-    return applySortToList(list, filters);
-  }, [invoices, debouncedSearch, filters]);
+  const filteredInvoices = useMemo(
+    () => filterInvoices(invoices, debouncedSearch, filters),
+    [invoices, debouncedSearch, filters]
+  );
 
   const filterActive = hasAnyActiveFilters(filters, debouncedSearch);
+
+  /** Removes a single active filter or the search term (toolbar chip "×"). */
+  const handleRemoveFilter = useCallback((clearKey) => {
+    if (clearKey === "search") {
+      // Reset the debounced value too so the list updates immediately
+      // instead of waiting out the remaining debounce delay.
+      setSearchQuery("");
+      setDebouncedSearch("");
+      return;
+    }
+    setFilters((prev) => clearFilterByKey(prev, clearKey));
+  }, []);
+
+  /**
+   * Resets every filter and the search term in one action, then returns
+   * focus to the search input so keyboard users don't lose their place.
+   * Also resets the debounced search value directly so the list updates
+   * immediately rather than waiting out the remaining debounce delay.
+   */
+  const handleClearAll = useCallback(() => {
+    setFilters(DEFAULT_FILTERS);
+    setSearchQuery("");
+    setDebouncedSearch("");
+    setTimeout(() => {
+      searchInputRef.current?.focus();
+    }, 0);
+  }, []);
 
   /**
    * Effect: fetch invoices on mount and on every retry.
@@ -347,6 +394,7 @@ export function InvestMarketplace({ loadInvoices = loadMockInvoices }) {
         */}
         <div className="mb-4">
           <InvoiceSearch
+            ref={searchInputRef}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             aria-label={copy.invest.searchPlaceholder}
@@ -359,6 +407,20 @@ export function InvestMarketplace({ loadInvoices = loadMockInvoices }) {
           onStatusToggle={handleStatusToggle}
           onClearStatuses={handleClearStatuses}
         />
+
+        {/* Results count + removable filter chips + Clear all filters control.
+            Only rendered once invoices have loaded — "shown"/"totalFiltered"
+            aren't meaningful during the loading skeleton or error state. */}
+        {Array.isArray(invoices) && (
+          <ActiveFilterSummary
+            shown={Math.min(visibleCount, filteredInvoices.length)}
+            totalFiltered={filteredInvoices.length}
+            filters={filters}
+            searchQuery={debouncedSearch}
+            onRemoveFilter={handleRemoveFilter}
+            onClearAll={handleClearAll}
+          />
+        )}
 
         <fieldset
           className="mb-8 rounded-xl border border-slate-800 bg-slate-900/30 p-6"
