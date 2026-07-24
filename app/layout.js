@@ -6,6 +6,7 @@ import { WalletProvider } from "../components/WalletProvider";
 import ThemeToggle, { THEME_STORAGE_KEY, THEMES } from "../components/ThemeToggle";
 import ShortcutHelpDialog from "../components/ShortcutHelpDialog";
 import { copy } from "./copy/en";
+import { env } from "../lib/config/env";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -18,7 +19,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata = {
-  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"),
+  metadataBase: new URL(env.siteUrl),
   title: `LiquiFact — ${copy.home.heroTitle}`,
   description: copy.home.heroSub,
   openGraph: {
