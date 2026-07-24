@@ -73,6 +73,7 @@ Shared configuration lives in a single `sharedConfig` object inside
 | `components/__tests__/`    | Accessibility tests using `jest-axe` (one per component).                                        |
 | `components/*.test.jsx`    | Unit/behaviour tests for individual components.                                                  |
 | `app/invest/page.test.jsx` | Integration tests for the `InvestMarketplace` component and `getInvoiceLoadAnnouncement` helper. |
+| `lib/format/*.test.tsx`    | Unit tests for the `lib/format` helpers (currency, amount, percent, config, date, truncateAddress). |
 
 ### Writing a new Jest test
 
@@ -101,6 +102,8 @@ test("MyComponent has no accessibility violations", async () => {
   expect(results).toHaveNoViolations();
 });
 ```
+
+**Testing `Intl`-based date/number formatting:** pin `timeZone: "UTC"` (or whichever zone the case needs) directly in the `Intl.DateTimeFormat` options passed to the function under test, rather than mutating `process.env.TZ`. That way the expected string in the test doesn't depend on the host machine's or CI runner's local timezone. See `lib/format/date.test.tsx` for the pattern, including a case that runs the same instant through two different explicit zones to prove the option is actually honoured.
 
 > If your component calls `useToast()`, wrap it in `<ToastProvider>`:
 >

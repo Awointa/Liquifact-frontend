@@ -1,112 +1,109 @@
-import { formatInvoiceDate, INVALID_DATE_FALLBACK } from "@/lib/format/date";
+import { formatInvoiceDate, INVALID_DATE_FALLBACK } from "./date";
+import { DEFAULT_LOCALE } from "./config";
 
-describe("formatInvoiceDate - Table Driven Tests", () => {
-  describe("valid ISO string inputs", () => {
-    it.each([
-      // The output is locale-dependent; we verify format rather than exact string
-      { input: "2025-01-15", locale: "en-US" },
-      { input: "2025-12-31", locale: "en-US" },
-      { input: "2000-06-01", locale: "en-US" },
-    ])("formats ISO date string '$input' to a non-fallback string", ({ input, locale }) => {
-      const result = formatInvoiceDate(input, { locale });
-      expect(result).not.toBe(INVALID_DATE_FALLBACK);
-      expect(typeof result).toBe("string");
-      expect(result.length).toBeGreaterThan(0);
-    });
+// Every case that asserts a hardcoded string pins timeZone: "UTC" in the
+// format options so the expectation doesn't depend on the host machine's
+// (or CI runner's) local timezone.
+const UTC_SHORT = { year: "numeric", month: "short", day: "numeric", timeZone: "UTC" } as const;
 
-    it("formats '2025-01-15' in en-US locale to contain 'Jan'", () => {
-      const result = formatInvoiceDate("2025-01-15", { locale: "en-US" });
-      expect(result).toContain("Jan");
-      expect(result).toContain("2025");
-      expect(result).toContain("15");
-    });
+describe("formatInvoiceDate - value types", () => {
+  it.each([
+    { label: "ISO date-only string", value: "2024-03-15", expected: "Mar 15, 2024" },
+    { label: "ISO datetime string with Z", value: "2024-03-15T10:30:00Z", expected: "Mar 15, 2024" },
+    { label: "Date object", value: new Date("2024-06-01T00:00:00Z"), expected: "Jun 1, 2024" },
+    { label: "epoch number (ms)", value: 1717200000000, expected: "Jun 1, 2024" },
+  ])("formats $label", ({ value, expected }) => {
+    expect(formatInvoiceDate(value, { format: UTC_SHORT })).toBe(expected);
+  });
+});
 
-    it("formats '2025-12-31' in en-US locale to contain 'Dec'", () => {
-      const result = formatInvoiceDate("2025-12-31", { locale: "en-US" });
-      expect(result).toContain("Dec");
-      expect(result).toContain("2025");
-      expect(result).toContain("31");
-    });
+describe("formatInvoiceDate - invalid/missing input", () => {
+  it.each([
+    { label: "null", value: null },
+    { label: "undefined", value: undefined },
+    { label: "empty string", value: "" },
+    { label: "unparseable string", value: "not-a-date" },
+    { label: "invalid Date object", value: new Date("not-a-date") },
+    { label: "plain object", value: {} as unknown as string },
+    { label: "array", value: [] as unknown as string },
+    { label: "boolean", value: true as unknown as string },
+  ])("returns the fallback for $label", ({ value }) => {
+    expect(formatInvoiceDate(value, { format: UTC_SHORT })).toBe(INVALID_DATE_FALLBACK);
   });
 
-  describe("Date object inputs", () => {
-    it("accepts a Date object and returns a formatted string", () => {
-      const date = new Date("2025-06-15T00:00:00Z");
-      const result = formatInvoiceDate(date, { locale: "en-US" });
-      expect(result).not.toBe(INVALID_DATE_FALLBACK);
-      expect(result).toContain("2025");
-    });
+  it("returns the fallback when the resolved Intl format options are invalid", () => {
+    expect(
+      formatInvoiceDate("2024-03-15", {
+        format: { month: "invalid-enum" } as unknown as Intl.DateTimeFormatOptions,
+      })
+    ).toBe(INVALID_DATE_FALLBACK);
+  });
+});
 
-    it("returns INVALID_DATE_FALLBACK for Invalid Date object", () => {
-      expect(formatInvoiceDate(new Date("not-a-date"))).toBe(INVALID_DATE_FALLBACK);
-    });
+describe("formatInvoiceDate - locale", () => {
+  it("formats using a non-default locale", () => {
+    expect(
+      formatInvoiceDate("2024-03-15", {
+        locale: "fr-FR",
+        format: { year: "numeric", month: "long", day: "numeric", timeZone: "UTC" },
+      })
+    ).toBe("15 mars 2024");
   });
 
-  describe("Unix timestamp inputs (milliseconds)", () => {
-    it("accepts a numeric timestamp and returns a formatted string", () => {
-      // 2025-01-01T00:00:00.000Z
-      const ts = new Date("2025-01-01").getTime();
-      const result = formatInvoiceDate(ts, { locale: "en-US" });
-      expect(result).not.toBe(INVALID_DATE_FALLBACK);
-      expect(result).toContain("2025");
-    });
+  it("defaults to en-US when no locale is given", () => {
+    expect(DEFAULT_LOCALE).toBe("en-US");
+    expect(formatInvoiceDate("2024-03-15", { format: UTC_SHORT })).toBe("Mar 15, 2024");
+  });
+});
 
-    it("handles timestamp 0 (epoch) without returning fallback", () => {
-      const result = formatInvoiceDate(0, { locale: "en-US" });
-      expect(result).not.toBe(INVALID_DATE_FALLBACK);
-    });
+describe("formatInvoiceDate - format options", () => {
+  it("honours a custom format shape", () => {
+    expect(
+      formatInvoiceDate("2024-03-15", {
+        format: { year: "2-digit", month: "2-digit", day: "2-digit", timeZone: "UTC" },
+      })
+    ).toBe("03/15/24");
   });
 
-  describe("invalid and missing inputs → INVALID_DATE_FALLBACK", () => {
-    it.each([
-      { label: "null", input: null },
-      { label: "undefined", input: undefined },
-      { label: "empty string", input: "" },
-      { label: "non-date string", input: "not-a-date" },
-      { label: "random string", input: "hello world" },
-    ] as const)("returns INVALID_DATE_FALLBACK for $label", ({ input }) => {
-      expect(formatInvoiceDate(input)).toBe(INVALID_DATE_FALLBACK);
-    });
+  it("uses the documented default format (year/month/day) when no options are passed", () => {
+    // Deliberately doesn't pin timeZone here: it computes the expected value
+    // via the same unpinned Intl call the implementation itself makes, so
+    // the assertion holds regardless of which timezone the host is in.
+    const instant = new Date("2024-06-01T12:00:00Z");
+    const expected = new Intl.DateTimeFormat(DEFAULT_LOCALE, {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+    }).format(instant);
+
+    expect(formatInvoiceDate(instant)).toBe(expected);
+  });
+});
+
+describe("formatInvoiceDate - timezone stability", () => {
+  const instant = "2024-01-01T02:00:00Z";
+
+  it("is stable for a fixed instant + fixed timeZone regardless of how many times it runs", () => {
+    const first = formatInvoiceDate(instant, { format: UTC_SHORT });
+    const second = formatInvoiceDate(instant, { format: UTC_SHORT });
+    expect(first).toBe("Jan 1, 2024");
+    expect(second).toBe(first);
   });
 
-  describe("custom format options", () => {
-    it("respects custom Intl.DateTimeFormatOptions", () => {
-      const result = formatInvoiceDate("2025-03-20", {
-        locale: "en-US",
-        format: { year: "numeric", month: "long", day: "2-digit" },
-      });
-      expect(result).toContain("March");
-      expect(result).toContain("2025");
+  it("respects an explicit non-UTC timeZone instead of silently using UTC", () => {
+    const utc = formatInvoiceDate(instant, { format: UTC_SHORT });
+    const nyc = formatInvoiceDate(instant, {
+      format: { ...UTC_SHORT, timeZone: "America/New_York" },
     });
 
-    it("supports numeric-only format", () => {
-      const result = formatInvoiceDate("2025-06-15", {
-        locale: "en-US",
-        format: { year: "numeric", month: "2-digit", day: "2-digit" },
-      });
-      expect(result).toMatch(/\d{1,2}\/\d{1,2}\/\d{4}/);
-    });
+    // Same instant, different civil date depending on the zone requested.
+    expect(utc).toBe("Jan 1, 2024");
+    expect(nyc).toBe("Dec 31, 2023");
   });
+});
 
-  describe("default options", () => {
-    it("uses default format when called with only a date value", () => {
-      const result = formatInvoiceDate("2025-07-04");
-      expect(result).not.toBe(INVALID_DATE_FALLBACK);
-      expect(result).toContain("2025");
-    });
-
-    it("uses default en-US locale when no options are provided", () => {
-      const result = formatInvoiceDate("2025-07-04");
-      // en-US default format: "Jul 4, 2025"
-      expect(result).toContain("Jul");
-      expect(result).toContain("4");
-      expect(result).toContain("2025");
-    });
-  });
-
-  describe("INVALID_DATE_FALLBACK export", () => {
-    it("exports the correct fallback string '—'", () => {
-      expect(INVALID_DATE_FALLBACK).toBe("—");
-    });
+describe("format constants re-export", () => {
+  it("re-exports INVALID_DATE_FALLBACK matching the shared config fallback", () => {
+    expect(INVALID_DATE_FALLBACK).toBe("—");
   });
 });
