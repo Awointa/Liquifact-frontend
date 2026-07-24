@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import ErrorBanner from "@/components/ErrorBanner";
@@ -211,6 +211,48 @@ export function filterInvoices(invoices, searchQuery, filters) {
   }
   return applySortToList(list, filters);
 }
+
+/**
+ * A single row in the invoice list. Wrapped in `memo` so that unrelated
+ * state changes in `InvestMarketplace` (e.g. a keystroke in the search box
+ * before the debounce fires) don't force every visible row to re-render —
+ * as long as `invoice` is referentially the same object as last render
+ * (true whenever `filteredInvoices`/`visibleInvoices` haven't recomputed),
+ * `memo`'s default shallow prop comparison skips this component entirely.
+ *
+ * @param {object}  props
+ * @param {object}  props.invoice
+ */
+export const InvoiceListItem = memo(function InvoiceListItem({ invoice }) {
+  return (
+    <li className="rounded-xl border border-slate-800 bg-slate-900/50 p-5">
+      <div className="flex items-center justify-between mb-3">
+        <Link
+          href={`/invest/${invoice.id}`}
+          className="font-medium text-slate-100 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-400 rounded"
+        >
+          {invoice.issuer}
+        </Link>
+        <span className="text-xs font-semibold px-2 py-1 rounded-full bg-cyan-900/60 text-cyan-300">
+          {invoice.status}
+        </span>
+      </div>
+      <div className="flex gap-6 text-sm text-slate-400">
+        <span>
+          {invoice.currency}&nbsp;{invoice.amount}
+        </span>
+        <span>
+          {copy.invest.labelYield}
+          {invoice.yield}
+        </span>
+        <span>
+          {copy.invest.labelMaturity}
+          {invoice.dueDate}
+        </span>
+      </div>
+    </li>
+  );
+});
 
 /**
  * InvestMarketplace – main component for the invest page.
@@ -445,6 +487,14 @@ export function InvestMarketplace({ loadInvoices = loadMockInvoices, onInvoiceRo
     }, 0);
   }, [filteredInvoices.length]);
 
+  // Memoized so this array — and therefore each invoice object reference
+  // handed to <InvoiceListItem> — only changes when the underlying filtered
+  // list or page size actually changes, not on every unrelated render.
+  const visibleInvoices = useMemo(
+    () => filteredInvoices.slice(0, visibleCount),
+    [filteredInvoices, visibleCount]
+  );
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
       <NavMenu />
@@ -542,14 +592,8 @@ export function InvestMarketplace({ loadInvoices = loadMockInvoices, onInvoiceRo
         ) : (
           <>
             <ul aria-label={copy.invest.listAriaLabel} className="space-y-4">
-              {filteredInvoices.slice(0, visibleCount).map((inv) => (
-                <li key={inv.id}>
-                  <InvoiceCard
-                    invoice={inv}
-                    isWatched={isWatched(inv.id)}
-                    onToggleWatch={toggleWatch}
-                  />
-                </li>
+              {visibleInvoices.map((inv) => (
+                <InvoiceListItem key={inv.id} invoice={inv} />
               ))}
             </ul>
             {visibleCount < filteredInvoices.length && (
