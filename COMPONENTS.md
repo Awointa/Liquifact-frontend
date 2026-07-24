@@ -570,6 +570,7 @@ Stellar wallet connection UI. Shows a status indicator dot, wallet address / hel
 
 **File:** `components/WalletStatus.jsx`
 
+> For the underlying state machine, the `useWallet()` hook API, and localStorage persistence rules this component consumes, see [`docs/wallet-developer-guide.md`](docs/wallet-developer-guide.md).
 ---
 
 ## Formatting Utilities
