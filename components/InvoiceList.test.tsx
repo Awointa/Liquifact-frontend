@@ -38,7 +38,7 @@ describe("InvoiceList", () => {
     render(<InvoiceList invoices={[]} />);
 
     expect(screen.getByText("No invoices yet")).toBeInTheDocument(); // ← exact match, no regex
-    expect(screen.getByText(/Upload your first invoice/i)).toBeInTheDocument();
+    expect(screen.getByText("Upload your first invoice")).toBeInTheDocument();
   });
 
   it("optimistically appends a new invoice when optimisticInvoices changes", () => {
