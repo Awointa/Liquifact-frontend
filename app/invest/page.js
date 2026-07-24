@@ -13,6 +13,7 @@ import InvoiceFilters, {
   parseSortState,
 } from "@/components/InvoiceFilters";
 import NavMenu from "@/components/NavMenu";
+import Button from "@/components/Button";
 import { copy } from "../copy/en";
 // Mock data is sourced exclusively from lib.js (single source of truth until the API client lands).
 import { loadMockInvoices } from "./lib";
@@ -433,15 +434,15 @@ export function InvestMarketplace({ loadInvoices = loadMockInvoices }) {
               ))}
             </ul>
             {visibleCount < filteredInvoices.length && (
-              <button
+              <Button
                 ref={loadMoreRef}
-                type="button"
+                variant="secondary"
                 onClick={handleLoadMore}
+                className="mt-6 w-full"
                 aria-label={copy.invest.loadMoreAriaLabel}
-                className="mt-6 w-full rounded-xl border border-slate-700 bg-slate-900/30 py-3 text-sm text-cyan-400 hover:bg-slate-800/50"
               >
                 {copy.invest.loadMore}
-              </button>
+              </Button>
             )}
             <div className="mt-6 rounded-xl border border-slate-800 bg-slate-900/30 p-4 text-sm text-slate-400">
               {copy.invest.yieldDisclaimer}

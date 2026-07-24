@@ -68,20 +68,20 @@ function getButtonClasses(ariaLabel: RegExp | string): string {
 // ─── Variant token → expected CSS fragment mapping ───────────────────────────
 //
 // Button.jsx applies these Tailwind classes per variant:
-//   primary   → "bg-cyan-500/20 text-cyan-400 ..."
-//   secondary → "border border-slate-600 text-slate-300 ..."
-//   warning   → "bg-amber-500/20 text-amber-400 ..."
-//   external  → "bg-violet-500/20 text-violet-400 ..."
-//   danger    → "bg-red-500/20 text-red-400 ..."
+//   primary   → "bg-cyan-500 text-slate-950 ..."
+//   secondary → "bg-slate-800 border border-slate-600 text-slate-200 ..."
+//   warning   → "bg-amber-500 text-slate-950 ..."
+//   external  → "bg-violet-500 text-white ..."
+//   danger    → "bg-red-500 text-white ..."
 //
 // We assert on a unique, stable fragment from each set.
 
 const VARIANT_MARKER: Record<string, string> = {
-  primary: "bg-cyan-500/20",
-  secondary: "border-slate-600",
-  warning: "bg-amber-500/20",
-  external: "bg-violet-500/20",
-  danger: "bg-red-500/20",
+  primary: "bg-cyan-500",
+  secondary: "bg-slate-800",
+  warning: "bg-amber-500",
+  external: "bg-violet-500",
+  danger: "bg-red-500",
 };
 
 // ─── Suite: correct variant per state ────────────────────────────────────────

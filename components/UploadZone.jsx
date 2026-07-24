@@ -4,6 +4,8 @@ import { useRef, useState } from "react";
 import { env } from "../lib/config/env";
 import { copy } from "../app/copy/en";
 import { validatePdfFile, sanitizeFilename } from "../lib/validation/pdf";
+import Button from "./Button";
+import Spinner from "./Spinner";
 
 // Base URL for backend API; validated and centralized in lib/config/env.
 const API_URL = env.apiUrl;
@@ -63,26 +65,6 @@ function FileConstraintNotice() {
           )}
       </p>
     </div>
-  );
-}
-
-function Spinner({ className = "" }) {
-  return (
-    <svg
-      className={`animate-spin -ml-1 mr-2 h-4 w-4 inline ${className}`}
-      xmlns="http://www.w3.org/2000/svg"
-      fill="none"
-      viewBox="0 0 24 24"
-      role="img"
-      aria-label={copy.uploadZone.spinnerLabel}
-    >
-      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-      <path
-        className="opacity-75"
-        fill="currentColor"
-        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-      />
-    </svg>
   );
 }
 
@@ -363,40 +345,30 @@ function UploadZone({ onUploadSuccess, progress }) {
             <span aria-hidden="true">{"\u{1F680}"}</span>
             {copy.uploadZone.statusSuccess}
           </p>
-          <button
-            type="button"
+          <Button
+            variant="primary"
             onClick={resetUpload}
-            className="mt-3 w-full rounded-xl bg-emerald-600 py-2.5 text-sm font-semibold text-white transition-all duration-200 hover:bg-emerald-500 focus-ring"
+            className="mt-3 w-full bg-emerald-600 hover:bg-emerald-500"
             aria-label={copy.uploadZone.resetAriaLabel}
           >
             {copy.uploadZone.resetAction}
-          </button>
+          </Button>
         </div>
       )}
 
-      <button
+      <Button
         id="invoice-upload-btn"
         type="submit"
         disabled={!file || isProcessing}
+        loading={isProcessing}
         aria-disabled={!file || isProcessing}
-        className="mt-4 w-full rounded-xl bg-cyan-500 py-3 text-sm font-semibold text-slate-950 transition-all duration-200
-          hover:bg-cyan-400 focus-ring
-          disabled:opacity-40 disabled:cursor-not-allowed"
+        className="mt-4 w-full"
+        aria-label={status === 'uploading' ? copy.uploadZone.submitUploading : status === 'tokenizing' ? copy.uploadZone.submitTokenizing : copy.uploadZone.submitIdle}
       >
-        {status === "uploading" && (
-          <>
-            <Spinner />
-            {copy.uploadZone.submitUploading}
-          </>
-        )}
-        {status === "tokenizing" && (
-          <>
-            <Spinner />
-            {copy.uploadZone.submitTokenizing}
-          </>
-        )}
+        {status === "uploading" && copy.uploadZone.submitUploading}
+        {status === "tokenizing" && copy.uploadZone.submitTokenizing}
         {(status === "idle" || status === "success") && copy.uploadZone.submitIdle}
-      </button>
+      </Button>
     </form>
   );
 }

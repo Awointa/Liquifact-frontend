@@ -2,6 +2,7 @@
 
 import { useCallback, useRef, useState } from "react";
 import { INVOICE_STATUSES, STATUS_PILL_MAP } from "@/lib/types/invoice";
+import Button from "./Button";
 
 export const DEFAULT_FILTERS = {
   yieldMin: "",
@@ -301,26 +302,26 @@ export function ActiveFilterSummary({
           <ul className="flex flex-wrap gap-2 list-none p-0 m-0" aria-label="Active filters">
             {chips.map((chip) => (
               <li key={chip.key}>
-                <button
-                  type="button"
+                <Button
+                  variant="primary"
                   onClick={() => onRemoveFilter(chip.clearKey)}
-                  className="inline-flex items-center gap-1 rounded-full border border-cyan-700/60 bg-cyan-900/20 px-3 py-1 text-xs text-cyan-300 transition-colors hover:bg-cyan-900/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400"
+                  className="rounded-full border border-cyan-700/60 bg-cyan-900/20 px-3 py-1 text-xs text-cyan-300 hover:bg-cyan-900/40"
                   aria-label={`Remove ${chip.label}`}
                 >
                   <span>{chip.label}</span>
                   <span aria-hidden="true">&times;</span>
-                </button>
+                </Button>
               </li>
             ))}
           </ul>
 
-          <button
-            type="button"
+          <Button
+            variant="secondary"
             onClick={onClearAll}
-            className="rounded-lg border border-slate-700 bg-slate-800/50 px-3 py-1 text-xs text-cyan-400 transition-colors hover:bg-slate-700/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400"
+            className="rounded-lg border border-slate-700 bg-slate-800/50 px-3 py-1 text-xs text-cyan-400 hover:bg-slate-700/50"
           >
             Clear all
-          </button>
+          </Button>
         </div>
       ) : null}
     </div>
@@ -347,19 +348,18 @@ function DirectionToggle({ column, filters, onFilterChange }) {
     : `Sort ${column} direction`;
 
   return (
-    <button
-      type="button"
+    <Button
       onClick={handleToggle}
       disabled={!isActive}
       aria-label={ariaLabel}
-      className={`rounded px-2 py-1 text-xs font-mono transition-colors select-none ${
+      className={`rounded px-2 py-1 text-xs font-mono select-none ${
         isActive
           ? "bg-cyan-900/40 text-cyan-300 hover:bg-cyan-800/60 border border-cyan-700"
           : "bg-slate-800/50 text-slate-500 border border-slate-700 cursor-default"
       }`}
     >
       {isActive && dir === "asc" ? "↑" : "↓"}
-    </button>
+    </Button>
   );
 }
 
@@ -389,14 +389,13 @@ export function StatusLegendFilter({ selectedStatuses = [], onStatusToggle, onCl
           const isPressed = selectedStatuses.includes(status);
           const pillMeta = STATUS_PILL_MAP[status] ?? STATUS_PILL_MAP.Unknown;
           return (
-            <button
+            <Button
               key={status}
-              type="button"
+              variant="secondary"
               aria-pressed={isPressed}
               onClick={() => onStatusToggle(status)}
               className={[
                 "inline-flex items-center rounded-full px-3 py-1 text-xs font-medium transition-all",
-                "border focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 focus-visible:ring-offset-1 focus-visible:ring-offset-slate-950",
                 isPressed
                   ? `${pillMeta.tone} border-transparent opacity-100`
                   : "border-slate-700 bg-slate-800/50 text-slate-400 opacity-70 hover:opacity-100 hover:border-slate-500",
@@ -405,18 +404,18 @@ export function StatusLegendFilter({ selectedStatuses = [], onStatusToggle, onCl
                 .join(" ")}
             >
               {status}
-            </button>
+            </Button>
           );
         })}
         {hasSelection && (
-          <button
-            type="button"
+          <Button
+            variant="secondary"
             onClick={onClearStatuses}
-            className="rounded-lg border border-slate-700 bg-slate-800/50 px-2 py-1 text-xs text-cyan-400 transition-colors hover:bg-slate-700/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400"
+            className="rounded-lg border border-slate-700 bg-slate-800/50 px-2 py-1 text-xs text-cyan-400 hover:bg-slate-700/50"
             aria-label="Clear status filters"
           >
             Clear
-          </button>
+          </Button>
         )}
       </div>
     </div>
@@ -499,19 +498,19 @@ export default function InvoiceFilters({ filters, onFilterChange, onClearFilters
         }}
       >
         {CURRENCIES.map((cur, index) => (
-          <button
+          <Button
             key={cur}
-            type="button"
             ref={(el) => {
               currencyRefs.current[index] = el;
             }}
             tabIndex={index === focusedCurrencyIndex ? 0 : -1}
+            variant={filters.currency === cur ? "primary" : "secondary"}
             onClick={() => {
               setFocusedCurrencyIndex(index);
               handleChange("currency", filters.currency === cur ? "" : cur);
             }}
             onFocus={() => setFocusedCurrencyIndex(index)}
-            className={`focus-ring rounded-lg border px-3 py-2 text-sm transition-colors ${
+            className={`rounded-lg border px-3 py-2 text-sm transition-colors ${
               filters.currency === cur
                 ? "border-cyan-500 bg-cyan-900/30 text-cyan-300"
                 : "border-slate-700 bg-slate-800/50 text-slate-300 hover:bg-slate-700/50"
@@ -520,7 +519,7 @@ export default function InvoiceFilters({ filters, onFilterChange, onClearFilters
             aria-pressed={filters.currency === cur}
           >
             {cur}
-          </button>
+          </Button>
         ))}
       </div>
 
@@ -568,8 +567,8 @@ export default function InvoiceFilters({ filters, onFilterChange, onClearFilters
         ))}
       </fieldset>
 
-      <button
-        type="button"
+      <Button
+        variant="secondary"
         onClick={onClearFilters}
         disabled={!active}
         className={`ml-auto rounded-lg border px-4 py-2 text-sm transition-colors ${
@@ -580,7 +579,7 @@ export default function InvoiceFilters({ filters, onFilterChange, onClearFilters
         aria-label="Clear all filters"
       >
         Clear Filters
-      </button>
+      </Button>
     </div>
   );
 }
