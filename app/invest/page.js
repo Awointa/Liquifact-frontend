@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import ErrorBanner from "@/components/ErrorBanner";
@@ -99,6 +99,46 @@ export function applySortToList(list, filters) {
     return multiplier * diff;
   });
 }
+
+/**
+ * InvoiceRow
+ *
+ * A single row in the invest marketplace list.  Wrapped in React.memo so it
+ * only re-renders when its own invoice data changes — not on unrelated parent
+ * state changes such as search input typing or filter panel updates.
+ *
+ * @param {{ inv: object }} props
+ */
+const InvoiceRow = memo(function InvoiceRow({ inv }) {
+  return (
+    <li className="rounded-xl border border-slate-800 bg-slate-900/50 p-5">
+      <div className="flex items-center justify-between mb-3">
+        <Link
+          href={`/invest/${inv.id}`}
+          className="font-medium text-slate-100 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-400 rounded"
+        >
+          {inv.issuer}
+        </Link>
+        <span className="text-xs font-semibold px-2 py-1 rounded-full bg-cyan-900/60 text-cyan-300">
+          {inv.status}
+        </span>
+      </div>
+      <div className="flex gap-6 text-sm text-slate-400">
+        <span>
+          {inv.currency}&nbsp;{inv.amount}
+        </span>
+        <span>
+          {copy.invest.labelYield}
+          {inv.yield}
+        </span>
+        <span>
+          {copy.invest.labelMaturity}
+          {inv.dueDate}
+        </span>
+      </div>
+    </li>
+  );
+});
 
 /**
  * InvestMarketplace – main component for the invest page.
@@ -404,32 +444,7 @@ export function InvestMarketplace({ loadInvoices = loadMockInvoices }) {
           <>
             <ul aria-label={copy.invest.listAriaLabel} className="space-y-4">
               {filteredInvoices.slice(0, visibleCount).map((inv) => (
-                <li key={inv.id} className="rounded-xl border border-slate-800 bg-slate-900/50 p-5">
-                  <div className="flex items-center justify-between mb-3">
-                    <Link
-                      href={`/invest/${inv.id}`}
-                      className="font-medium text-slate-100 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-400 rounded"
-                    >
-                      {inv.issuer}
-                    </Link>
-                    <span className="text-xs font-semibold px-2 py-1 rounded-full bg-cyan-900/60 text-cyan-300">
-                      {inv.status}
-                    </span>
-                  </div>
-                  <div className="flex gap-6 text-sm text-slate-400">
-                    <span>
-                      {inv.currency}&nbsp;{inv.amount}
-                    </span>
-                    <span>
-                      {copy.invest.labelYield}
-                      {inv.yield}
-                    </span>
-                    <span>
-                      {copy.invest.labelMaturity}
-                      {inv.dueDate}
-                    </span>
-                  </div>
-                </li>
+                <InvoiceRow key={inv.id} inv={inv} />
               ))}
             </ul>
             {visibleCount < filteredInvoices.length && (
