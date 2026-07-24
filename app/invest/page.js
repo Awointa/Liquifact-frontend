@@ -1,23 +1,18 @@
 "use client";
 
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import ErrorBanner from "@/components/ErrorBanner";
 import InvoiceListSkeleton from "@/components/InvoiceListSkeleton";
 import InvoiceSearch from "@/components/InvoiceSearch";
 import InvoiceFilters, {
-  ActiveFilterSummary,
   DEFAULT_FILTERS,
   StatusLegendFilter,
-  clearFilterByKey,
   hasAnyActiveFilters,
   parseSortState,
 } from "@/components/InvoiceFilters";
-import InvoiceCard from "@/components/InvoiceCard";
-import Pagination from "@/components/Pagination";
 import NavMenu from "@/components/NavMenu";
-import useWatchlist from "@/lib/hooks/useWatchlist";
 import { copy } from "../copy/en";
 // Mock data is sourced exclusively from lib.js (single source of truth until the API client lands).
 import { loadMockInvoices } from "./lib";
@@ -53,45 +48,8 @@ export function getInvoiceLoadAnnouncement(invoices, { filterActive, filteredCou
 
 export function getPaginationAnnouncement(shown, total) {
   if (total === 0) return copy.invest.announceNoInvoices;
-  return copy.invest.announceShowing
-    .replace("{shown}", shown)
-    .replace("{total}", total);
+  return copy.invest.announceShowing.replace("{shown}", shown).replace("{total}", total);
 }
-
-const InvestInvoiceRow = memo(function InvestInvoiceRow({ invoice, rowRenderTracker }) {
-  rowRenderTracker?.(invoice.id);
-
-  return (
-    <li className="rounded-xl border border-slate-800 bg-slate-900/50 p-5">
-      <div className="flex items-center justify-between mb-3">
-        <Link
-          href={`/invest/${invoice.id}`}
-          className="font-medium text-slate-100 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-400 rounded"
-        >
-          {invoice.issuer}
-        </Link>
-        <span className="text-xs font-semibold px-2 py-1 rounded-full bg-cyan-900/60 text-cyan-300">
-          {invoice.status}
-        </span>
-      </div>
-      <div className="flex gap-6 text-sm text-slate-400">
-        <span>
-          {invoice.currency}&nbsp;{invoice.amount}
-        </span>
-        <span>
-          {copy.invest.labelYield}
-          {invoice.yield}
-        </span>
-        <span>
-          {copy.invest.labelMaturity}
-          {invoice.dueDate}
-        </span>
-      </div>
-    </li>
-  );
-});
-
-export { InvestInvoiceRow };
 
 /**
  * Parse a numeric amount string like "12,500" → 12500.
@@ -142,40 +100,16 @@ export function applySortToList(list, filters) {
   });
 }
 
-export function deriveFilteredInvoices(invoices, debouncedSearch, filters) {
-  if (!Array.isArray(invoices)) return [];
-  let list = invoices;
-
-  if (debouncedSearch.trim()) {
-    const q = debouncedSearch.toLowerCase();
-    list = list.filter((inv) => inv.issuer?.toLowerCase().includes(q));
-  }
-  if (filters.currency) {
-    list = list.filter((inv) => inv.currency === filters.currency);
-  }
-  if (filters.yieldMin !== "") {
-    const min = parseFloat(filters.yieldMin);
-    list = list.filter((inv) => parseYield(inv.yield) >= min);
-  }
-  if (filters.yieldMax !== "") {
-    const max = parseFloat(filters.yieldMax);
-    list = list.filter((inv) => parseYield(inv.yield) <= max);
-  }
-  if (filters.maturityFrom) {
-    list = list.filter((inv) => inv.dueDate >= filters.maturityFrom);
-  }
-  if (filters.maturityTo) {
-    list = list.filter((inv) => inv.dueDate <= filters.maturityTo);
-  }
-  if (Array.isArray(filters.statuses) && filters.statuses.length > 0) {
-    list = list.filter((inv) => filters.statuses.includes(inv.status));
-  }
-  return applySortToList(list, filters);
-}
-
-export const InvoiceRow = memo(function InvoiceRow({ invoice: inv, onRender }) {
-  onRender?.(inv.id);
-
+/**
+ * InvoiceRow
+ *
+ * A single row in the invest marketplace list.  Wrapped in React.memo so it
+ * only re-renders when its own invoice data changes — not on unrelated parent
+ * state changes such as search input typing or filter panel updates.
+ *
+ * @param {{ inv: object }} props
+ */
+const InvoiceRow = memo(function InvoiceRow({ inv }) {
   return (
     <li className="rounded-xl border border-slate-800 bg-slate-900/50 p-5">
       <div className="flex items-center justify-between mb-3">
@@ -207,89 +141,6 @@ export const InvoiceRow = memo(function InvoiceRow({ invoice: inv, onRender }) {
 });
 
 /**
- * Filters and sorts the raw invoice list per the current search term and
- * structured filters. Pure function — no component state — so it can be
- * unit-tested directly and reused by the memoized computation below.
- *
- * @param {Array}  invoices
- * @param {string} searchQuery
- * @param {object} filters
- * @returns {Array}
- */
-export function filterInvoices(invoices, searchQuery, filters) {
-  if (!Array.isArray(invoices)) return [];
-  let list = invoices;
-
-  if (searchQuery.trim()) {
-    const q = searchQuery.toLowerCase();
-    list = list.filter((inv) => inv.issuer?.toLowerCase().includes(q));
-  }
-  if (filters.currency) {
-    list = list.filter((inv) => inv.currency === filters.currency);
-  }
-  if (filters.yieldMin !== "") {
-    const min = parseFloat(filters.yieldMin);
-    list = list.filter((inv) => parseYield(inv.yield) >= min);
-  }
-  if (filters.yieldMax !== "") {
-    const max = parseFloat(filters.yieldMax);
-    list = list.filter((inv) => parseYield(inv.yield) <= max);
-  }
-  if (filters.maturityFrom) {
-    list = list.filter((inv) => inv.dueDate >= filters.maturityFrom);
-  }
-  if (filters.maturityTo) {
-    list = list.filter((inv) => inv.dueDate <= filters.maturityTo);
-  }
-  if (Array.isArray(filters.statuses) && filters.statuses.length > 0) {
-    list = list.filter((inv) => filters.statuses.includes(inv.status));
-  }
-  return applySortToList(list, filters);
-}
-
-/**
- * A single row in the invoice list. Wrapped in `memo` so that unrelated
- * state changes in `InvestMarketplace` (e.g. a keystroke in the search box
- * before the debounce fires) don't force every visible row to re-render —
- * as long as `invoice` is referentially the same object as last render
- * (true whenever `filteredInvoices`/`visibleInvoices` haven't recomputed),
- * `memo`'s default shallow prop comparison skips this component entirely.
- *
- * @param {object}  props
- * @param {object}  props.invoice
- */
-export const InvoiceListItem = memo(function InvoiceListItem({ invoice }) {
-  return (
-    <li className="rounded-xl border border-slate-800 bg-slate-900/50 p-5">
-      <div className="flex items-center justify-between mb-3">
-        <Link
-          href={`/invest/${invoice.id}`}
-          className="font-medium text-slate-100 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-400 rounded"
-        >
-          {invoice.issuer}
-        </Link>
-        <span className="text-xs font-semibold px-2 py-1 rounded-full bg-cyan-900/60 text-cyan-300">
-          {invoice.status}
-        </span>
-      </div>
-      <div className="flex gap-6 text-sm text-slate-400">
-        <span>
-          {invoice.currency}&nbsp;{invoice.amount}
-        </span>
-        <span>
-          {copy.invest.labelYield}
-          {invoice.yield}
-        </span>
-        <span>
-          {copy.invest.labelMaturity}
-          {invoice.dueDate}
-        </span>
-      </div>
-    </li>
-  );
-});
-
-/**
  * InvestMarketplace – main component for the invest page.
  *
  * Fetches invoices via `loadInvoices`, renders them PAGE_SIZE at a time,
@@ -302,28 +153,20 @@ export const InvoiceListItem = memo(function InvoiceListItem({ invoice }) {
  * stale in-flight request via AbortController, and re-announces via the
  * polite status region once the new load settles.
  *
- * Supports a watchlist feature where investors can star invoices for
- * follow-up.  A watchlist-only view mode composes with the existing
- * search and filter predicates.
- *
  * @param {object}   props
  * @param {Function} [props.loadInvoices] - Async function that resolves to an
  *   invoice array.  Defaults to the mock loader; injectable for testing.
- * @param {Function} [props.onInvoiceRowRender] - Test-only render instrumentation.
  * @returns {JSX.Element}
  */
-export function InvestMarketplace({ loadInvoices = loadMockInvoices, rowRenderTracker }) {
+export function InvestMarketplace({ loadInvoices = loadMockInvoices }) {
   const searchParams = useSearchParams();
+  const searchParamsValue = searchParams ?? new URLSearchParams();
 
   const [invoices, setInvoices] = useState(null); // null = loading
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [searchQuery, setSearchQuery] = useState("");
   const [loadError, setLoadError] = useState("");
   const [filters, setFilters] = useState(DEFAULT_FILTERS);
-  const [watchlistOnly, setWatchlistOnly] = useState(false);
-
-  // Watchlist hook — persisted via localStorage
-  const { watchlist, toggleWatch, isWatched, pruneWatchlist } = useWatchlist();
 
   /**
    * Incrementing retryKey causes the load effect to re-run, implementing
@@ -332,9 +175,9 @@ export function InvestMarketplace({ loadInvoices = loadMockInvoices, rowRenderTr
    */
   const [retryKey, setRetryKey] = useState(0);
 
-  // Tracks the invoices reference paging was last reset for. Compared during
-  // render (rather than in an effect) per the React-recommended pattern for
-  // resetting state when a prop/value changes: https://react.dev/learn/you-might-not-need-an-effect
+  // Reset paging whenever the raw invoice data changes (new fetch, retry, etc.).
+  // Compared during render per the React-recommended pattern:
+  // https://react.dev/learn/you-might-not-need-an-effect
   const [pagingResetFor, setPagingResetFor] = useState(invoices);
   if (invoices !== pagingResetFor) {
     setPagingResetFor(invoices);
@@ -343,9 +186,6 @@ export function InvestMarketplace({ loadInvoices = loadMockInvoices, rowRenderTr
 
   /** Ref forwarded to the "Load more" button for focus management. */
   const loadMoreRef = useRef(null);
-
-  /** Ref forwarded to the search input so "Clear all" can return focus to it. */
-  const searchInputRef = useRef(null);
 
   /**
    * Resets error/loading state and re-runs the load effect.
@@ -378,59 +218,56 @@ export function InvestMarketplace({ loadInvoices = loadMockInvoices, rowRenderTr
   }, []);
 
   // Debounced search term
-  const debouncedSearch = useDebouncedValue(searchQuery, SEARCH_DEBOUNCE_MS);
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(searchQuery), SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(t);
+  }, [searchQuery]);
 
+  // Reset the visible page count to PAGE_SIZE whenever the filters or debounced
+  // search term change, using the React-sanctioned "adjust state during render"
+  // pattern so the user always starts at the top of the newly filtered list
+  // (avoids a setState-in-effect cascading render).
+  const filterSignature = JSON.stringify([debouncedSearch, filters]);
+  const [prevFilterSignature, setPrevFilterSignature] = useState(filterSignature);
+  if (filterSignature !== prevFilterSignature) {
+    setPrevFilterSignature(filterSignature);
+    setVisibleCount(PAGE_SIZE);
+  }
 
   // Filtered + sorted invoice list
-  const filteredInvoices = useMemo(
-    () => filterInvoices(invoices, debouncedSearch, filters),
-    [invoices, debouncedSearch, filters]
-  );
+  const filteredInvoices = useMemo(() => {
+    if (!Array.isArray(invoices)) return [];
+    let list = invoices;
 
-  const visibleInvoices = useMemo(
-    () => filteredInvoices.slice(0, visibleCount),
-    [filteredInvoices, visibleCount]
-  );
-
-  const invoiceRows = useMemo(
-    () =>
-      visibleInvoices.map((inv) => (
-        <InvestInvoiceRow key={inv.id} invoice={inv} rowRenderTracker={rowRenderTracker} />
-      )),
-    [visibleInvoices, rowRenderTracker]
-  );
-
-  const filterActive = useMemo(
-    () => hasAnyActiveFilters(filters, debouncedSearch),
-    [filters, debouncedSearch]
-  );
-
-  /** Removes a single active filter or the search term (toolbar chip "×"). */
-  const handleRemoveFilter = useCallback((clearKey) => {
-    if (clearKey === "search") {
-      // Reset the debounced value too so the list updates immediately
-      // instead of waiting out the remaining debounce delay.
-      setSearchQuery("");
-      setDebouncedSearch("");
-      return;
+    if (debouncedSearch.trim()) {
+      const q = debouncedSearch.toLowerCase();
+      list = list.filter((inv) => inv.issuer?.toLowerCase().includes(q));
     }
-    setFilters((prev) => clearFilterByKey(prev, clearKey));
-  }, []);
+    if (filters.currency) {
+      list = list.filter((inv) => inv.currency === filters.currency);
+    }
+    if (filters.yieldMin !== "") {
+      const min = parseFloat(filters.yieldMin);
+      list = list.filter((inv) => parseYield(inv.yield) >= min);
+    }
+    if (filters.yieldMax !== "") {
+      const max = parseFloat(filters.yieldMax);
+      list = list.filter((inv) => parseYield(inv.yield) <= max);
+    }
+    if (filters.maturityFrom) {
+      list = list.filter((inv) => inv.dueDate >= filters.maturityFrom);
+    }
+    if (filters.maturityTo) {
+      list = list.filter((inv) => inv.dueDate <= filters.maturityTo);
+    }
+    if (Array.isArray(filters.statuses) && filters.statuses.length > 0) {
+      list = list.filter((inv) => filters.statuses.includes(inv.status));
+    }
+    return applySortToList(list, filters);
+  }, [invoices, debouncedSearch, filters]);
 
-  /**
-   * Resets every filter and the search term in one action, then returns
-   * focus to the search input so keyboard users don't lose their place.
-   * Also resets the debounced search value directly so the list updates
-   * immediately rather than waiting out the remaining debounce delay.
-   */
-  const handleClearAll = useCallback(() => {
-    setFilters(DEFAULT_FILTERS);
-    setSearchQuery("");
-    setDebouncedSearch("");
-    setTimeout(() => {
-      searchInputRef.current?.focus();
-    }, 0);
-  }, []);
+  const filterActive = hasAnyActiveFilters(filters, debouncedSearch);
 
   /**
    * Effect: fetch invoices on mount and on every retry.
@@ -442,8 +279,6 @@ export function InvestMarketplace({ loadInvoices = loadMockInvoices, rowRenderTr
    * - retryKey is the sole dependency that forces a re-run on retry; it does
    *   not interact with the abort/isActive logic in any racy way because the
    *   cleanup always runs before the next effect body executes.
-   * - After loading, prune stale watchlist IDs that no longer exist in the API
-   *   response so the watchlist never references missing invoices.
    */
   useEffect(() => {
     let isActive = true;
@@ -459,10 +294,6 @@ export function InvestMarketplace({ loadInvoices = loadMockInvoices, rowRenderTr
 
         setInvoices(normalizedInvoices);
         setLoadError("");
-
-        // Prune stale watchlist IDs that are no longer returned by the API.
-        const validIds = normalizedInvoices.map((inv) => inv.id);
-        pruneWatchlist(validIds);
       } catch {
         if (!isActive) return;
 
@@ -478,8 +309,7 @@ export function InvestMarketplace({ loadInvoices = loadMockInvoices, rowRenderTr
       controller.abort();
     };
     // retryKey triggers a fresh load on retry without changing loadInvoices.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loadInvoices, retryKey, pruneWatchlist]);
+  }, [loadInvoices, retryKey]);
 
   // Derive the polite live-region announcement directly from reactive state.
   // Using useMemo (rather than a useEffect + setState) avoids a cascading
@@ -506,22 +336,6 @@ export function InvestMarketplace({ loadInvoices = loadMockInvoices, rowRenderTr
     return getInvoiceLoadAnnouncement(invoices);
   }, [filteredInvoices, filterActive, invoices, visibleCount, loadError]);
 
-  const [liveAnnouncement, setLiveAnnouncement] = useState("");
-  const prevSearchQueryRef = useRef(searchQuery);
-
-  useEffect(() => {
-    if (searchQuery !== prevSearchQueryRef.current) {
-      prevSearchQueryRef.current = searchQuery;
-      const t = setTimeout(() => {
-        setLiveAnnouncement(statusMessage);
-      }, SEARCH_DEBOUNCE_MS);
-      return () => clearTimeout(t);
-    } else {
-      prevSearchQueryRef.current = searchQuery;
-      setLiveAnnouncement(statusMessage);
-    }
-  }, [statusMessage, searchQuery]);
-
   // ── Load-more handler ──────────────────────────────────────────────────────
   /**
    * Appends the next PAGE_SIZE items and updates the live-region status.
@@ -537,21 +351,23 @@ export function InvestMarketplace({ loadInvoices = loadMockInvoices, rowRenderTr
     }, 0);
   }, [filteredInvoices.length]);
 
-  // Memoized so this array — and therefore each invoice object reference
-  // handed to <InvoiceListItem> — only changes when the underlying filtered
-  // list or page size actually changes, not on every unrelated render.
-  const visibleInvoices = useMemo(
-    () => filteredInvoices.slice(0, visibleCount),
-    [filteredInvoices, visibleCount]
-  );
+  // const visibleInvoices = filteredInvoices.slice(0, visibleCount);
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
+      {/* <header className="border-b border-slate-800 px-6 py-4">
+        <Link
+          href="/"
+          className="inline-block py-3 text-xl font-semibold tracking-tight text-cyan-400 hover:underline"
+        >
+          ← LiquiFact
+        </Link>
+      </header> */}
       <NavMenu />
 
       <main className="max-w-4xl mx-auto px-6 py-12">
         {/* Polite live region – announced to screen readers on every state change */}
-        <div role="status" aria-live="polite" aria-atomic="true" data-testid="marketplace-status" className="sr-only">
+        <div role="status" aria-live="polite" aria-atomic="true" className="sr-only">
           {statusMessage}
         </div>
 
@@ -571,7 +387,6 @@ export function InvestMarketplace({ loadInvoices = loadMockInvoices, rowRenderTr
         */}
         <div className="mb-4">
           <InvoiceSearch
-            ref={searchInputRef}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             aria-label={copy.invest.searchPlaceholder}
@@ -584,20 +399,6 @@ export function InvestMarketplace({ loadInvoices = loadMockInvoices, rowRenderTr
           onStatusToggle={handleStatusToggle}
           onClearStatuses={handleClearStatuses}
         />
-
-        {/* Results count + removable filter chips + Clear all filters control.
-            Only rendered once invoices have loaded — "shown"/"totalFiltered"
-            aren't meaningful during the loading skeleton or error state. */}
-        {Array.isArray(invoices) && (
-          <ActiveFilterSummary
-            shown={Math.min(visibleCount, filteredInvoices.length)}
-            totalFiltered={filteredInvoices.length}
-            filters={filters}
-            searchQuery={debouncedSearch}
-            onRemoveFilter={handleRemoveFilter}
-            onClearAll={handleClearAll}
-          />
-        )}
 
         <fieldset
           className="mb-8 rounded-xl border border-slate-800 bg-slate-900/30 p-6"
@@ -642,7 +443,9 @@ export function InvestMarketplace({ loadInvoices = loadMockInvoices, rowRenderTr
         ) : (
           <>
             <ul aria-label={copy.invest.listAriaLabel} className="space-y-4">
-              {invoiceRows}
+              {filteredInvoices.slice(0, visibleCount).map((inv) => (
+                <InvoiceRow key={inv.id} inv={inv} />
+              ))}
             </ul>
             {visibleCount < filteredInvoices.length && (
               <button

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 /**
  * The three theme options the user can cycle through.
@@ -80,23 +80,6 @@ export default function ThemeToggle({ className = "" }) {
     }
   });
 
-  const [liveAnnouncement, setLiveAnnouncement] = useState("");
-  const isFirstRender = useRef(true);
-
-  // Announce preference changes politely, debounced, skipping initial mount.
-  useEffect(() => {
-    if (isFirstRender.current) {
-      isFirstRender.current = false;
-      return;
-    }
-
-    const timer = setTimeout(() => {
-      setLiveAnnouncement(`Theme set to ${preference}`);
-    }, 150);
-
-    return () => clearTimeout(timer);
-  }, [preference]);
-
   // Keep data-theme in sync whenever the preference state changes
   useEffect(() => {
     applyTheme(preference);
@@ -118,14 +101,16 @@ export default function ThemeToggle({ className = "" }) {
     return () => mq.removeEventListener("change", handler);
   }, [preference]);
 
-  const handleClick = () => {
+  const handleClick = useCallback(() => {
     setPreference((prev) => {
       const idx = THEMES.indexOf(prev);
       return THEMES[(idx + 1) % THEMES.length];
     });
-  };
+  }, []);
 
-  const ICONS = {
+  // ICONS and LABELS are static — defined outside the component would work too,
+  // but useMemo keeps them co-located and documents the intent clearly.
+  const ICONS = useMemo(() => ({
     light: (
       // Sun
       <svg
@@ -187,48 +172,38 @@ export default function ThemeToggle({ className = "" }) {
         <line x1="12" y1="17" x2="12" y2="21" />
       </svg>
     ),
-  };
+  }), []);
 
-  const LABELS = {
+  const LABELS = useMemo(() => ({
     light: "Theme: Light (click for Dark)",
     dark: "Theme: Dark (click for System)",
     system: "Theme: System (click for Light)",
-  };
+  }), []);
 
   const nextPref = THEMES[(THEMES.indexOf(preference) + 1) % THEMES.length];
   const capitalise = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 
   return (
-    <>
-      <button
-        id="theme-toggle"
-        type="button"
-        onClick={handleClick}
-        aria-label={LABELS[preference]}
-        aria-pressed={preference !== "system"}
-        title={`Current theme: ${capitalise(preference)}`}
-        data-theme-pref={preference}
-        data-theme-next={nextPref}
-        className={[
-          "rounded-lg p-2 transition-colors",
-          "text-slate-300 hover:text-cyan-400 hover:bg-slate-800",
-          "dark:text-slate-300 dark:hover:text-cyan-400",
-          "focus-ring",
-          className,
-        ]
-          .filter(Boolean)
-          .join(" ")}
-      >
-        {ICONS[preference]}
-      </button>
-      <div
-        role="status"
-        aria-live="polite"
-        className="sr-only"
-        data-testid="theme-live-region"
-      >
-        {liveAnnouncement}
-      </div>
-    </>
+    <button
+      id="theme-toggle"
+      type="button"
+      onClick={handleClick}
+      aria-label={LABELS[preference]}
+      aria-pressed={preference !== "system"}
+      title={`Current theme: ${capitalise(preference)}`}
+      data-theme-pref={preference}
+      data-theme-next={nextPref}
+      className={[
+        "rounded-lg p-2 transition-colors",
+        "text-slate-300 hover:text-cyan-400 hover:bg-slate-800",
+        "dark:text-slate-300 dark:hover:text-cyan-400",
+        "focus-ring",
+        className,
+      ]
+        .filter(Boolean)
+        .join(" ")}
+    >
+      {ICONS[preference]}
+    </button>
   );
 }
