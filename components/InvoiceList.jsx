@@ -12,7 +12,8 @@ const INVOICE_STATUSES = {
 };
 
 const STATUS_STYLES = {
-  [INVOICE_STATUSES.PENDING_TOKENIZATION]: "bg-amber-500/10 text-amber-200 ring-1 ring-amber-400/20",
+  [INVOICE_STATUSES.PENDING_TOKENIZATION]:
+    "bg-amber-500/10 text-amber-200 ring-1 ring-amber-400/20",
   [INVOICE_STATUSES.TOKENIZED]: "bg-cyan-500/10 text-cyan-200 ring-1 ring-cyan-400/20",
   [INVOICE_STATUSES.FUNDED]: "bg-emerald-500/10 text-emerald-200 ring-1 ring-emerald-400/20",
   [INVOICE_STATUSES.SETTLED]: "bg-slate-800/80 text-slate-200 ring-1 ring-slate-500/20",
@@ -84,7 +85,9 @@ export default function InvoiceList({ invoices = [], optimisticInvoices = [] }) 
           <h2 id="invoice-list-heading" className="text-xl font-semibold text-slate-100">
             Your invoices
           </h2>
-          <p className="text-sm text-slate-400">Track tokenization progress for uploaded documents.</p>
+          <p className="text-sm text-slate-400">
+            Track tokenization progress for uploaded documents.
+          </p>
         </div>
       </div>
 
@@ -109,12 +112,19 @@ export default function InvoiceList({ invoices = [], optimisticInvoices = [] }) 
         <ul className="space-y-4">
           {mergedInvoices.map((invoice) => {
             const statusValue =
-              invoice.status in STATUS_STYLES ? invoice.status : INVOICE_STATUSES.PENDING_TOKENIZATION;
+              invoice.status in STATUS_STYLES
+                ? invoice.status
+                : INVOICE_STATUSES.PENDING_TOKENIZATION;
             return (
-              <li key={invoice.id} className="rounded-3xl border border-slate-800 bg-slate-900/50 p-5 shadow-sm">
+              <li
+                key={invoice.id}
+                className="rounded-3xl border border-slate-800 bg-slate-900/50 p-5 shadow-sm"
+              >
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                   <div>
-                    <p className="text-sm font-medium uppercase tracking-[0.14em] text-slate-500">Invoice</p>
+                    <p className="text-sm font-medium uppercase tracking-[0.14em] text-slate-500">
+                      Invoice
+                    </p>
                     <p className="mt-2 text-lg font-semibold text-slate-100">{invoice.issuer}</p>
                   </div>
                   <span
@@ -134,7 +144,9 @@ export default function InvoiceList({ invoices = [], optimisticInvoices = [] }) 
                     </dd>
                   </div>
                   <div>
-                    <dt className="text-xs uppercase tracking-[0.24em] text-slate-500">Estimated yield</dt>
+                    <dt className="text-xs uppercase tracking-[0.24em] text-slate-500">
+                      Estimated yield
+                    </dt>
                     <dd className="mt-2 text-sm text-slate-200">{invoice.yield}</dd>
                   </div>
                   <div>
@@ -142,7 +154,9 @@ export default function InvoiceList({ invoices = [], optimisticInvoices = [] }) 
                     <dd className="mt-2 text-sm text-slate-200">{invoice.dueDate}</dd>
                   </div>
                   <div>
-                    <dt className="text-xs uppercase tracking-[0.24em] text-slate-500">Reference</dt>
+                    <dt className="text-xs uppercase tracking-[0.24em] text-slate-500">
+                      Reference
+                    </dt>
                     <dd className="mt-2 text-sm text-slate-200">{invoice.id}</dd>
                   </div>
                 </dl>
