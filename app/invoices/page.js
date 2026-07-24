@@ -20,10 +20,6 @@ export default function InvoicesPage() {
           </p>
         </div>
 
-        {/* 
-          The UploadView component now manages the UploadZone, the InvoiceList, 
-          and all fetch-related states (Loading, Error, Empty).
-        */}
         <UploadView loadInvoices={loadMockInvoices} />
       </main>
     </div>
