@@ -1,6 +1,8 @@
 import "@testing-library/jest-dom";
 import { act, render, screen, fireEvent, within } from "@testing-library/react";
 import InvestPage, {
+  applySortToList,
+  deriveFilteredInvoices,
   getInvoiceLoadAnnouncement,
   getPaginationAnnouncement,
   InvestMarketplace,
@@ -739,6 +741,44 @@ describe("InvestMarketplace", () => {
     expect(screen.getByRole("status")).toHaveTextContent("1 of 2 invoices match");
   });
 
+  it("filters invoices by status and restores them when status filters clear", async () => {
+    const invoices = [
+      {
+        id: "inv-001",
+        issuer: "A",
+        amount: "100",
+        currency: "USD",
+        dueDate: "2026-06-15",
+        yield: "5%",
+        status: "Open",
+      },
+      {
+        id: "inv-002",
+        issuer: "B",
+        amount: "200",
+        currency: "EUR",
+        dueDate: "2026-07-01",
+        yield: "6%",
+        status: "Funded",
+      },
+    ];
+
+    render(<InvestMarketplace loadInvoices={createDeferredLoader(invoices, 0)} />);
+    await flushTimers(0);
+
+    fireEvent.click(screen.getByRole("button", { name: "Funded" }));
+
+    expect(getInvoiceListItems()).toHaveLength(1);
+    expect(screen.getByText("B")).toBeInTheDocument();
+    expect(screen.queryByText("A")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Clear status filters" }));
+
+    expect(getInvoiceListItems()).toHaveLength(2);
+    expect(screen.getByText("A")).toBeInTheDocument();
+    expect(screen.getByText("B")).toBeInTheDocument();
+  });
+
   it("filters invoices by issuer search query after debounce", async () => {
     const invoices = [
       {
@@ -988,6 +1028,43 @@ describe("InvestMarketplace", () => {
     // Now cross the threshold — filtering should kick in
     await flushTimers(50);
     expect(screen.getAllByRole("listitem")).toHaveLength(1);
+  });
+
+  it("does not re-render invoice rows for unrelated search state before debounce", async () => {
+    const invoices = Array.from({ length: PAGE_SIZE + 5 }, (_, i) => ({
+      id: `inv-${String(i + 1).padStart(3, "0")}`,
+      issuer: i < 5 ? `Target Issuer ${i + 1}` : `Other Issuer ${i + 1}`,
+      amount: "1,000",
+      currency: "USD",
+      dueDate: "2026-12-31",
+      yield: "5.0%",
+      status: "Open",
+    }));
+    const onInvoiceRowRender = jest.fn();
+
+    render(
+      <InvestMarketplace
+        loadInvoices={createDeferredLoader(invoices, 0)}
+        onInvoiceRowRender={onInvoiceRowRender}
+      />
+    );
+    await flushTimers(0);
+
+    expect(getInvoiceListItems()).toHaveLength(PAGE_SIZE);
+    expect(onInvoiceRowRender).toHaveBeenCalledTimes(PAGE_SIZE);
+
+    fireEvent.change(screen.getByLabelText("Search by issuer name"), {
+      target: { value: "Target" },
+    });
+
+    expect(getInvoiceListItems()).toHaveLength(PAGE_SIZE);
+    expect(onInvoiceRowRender).toHaveBeenCalledTimes(PAGE_SIZE);
+
+    await flushTimers(SEARCH_DEBOUNCE_MS);
+
+    expect(getInvoiceListItems()).toHaveLength(5);
+    expect(screen.getByText("Target Issuer 1")).toBeInTheDocument();
+    expect(screen.queryByText("Other Issuer 6")).not.toBeInTheDocument();
   });
 
   it("announces filtered results in the live region when search is applied", async () => {
@@ -1289,6 +1366,135 @@ describe("lib helpers", () => {
   it("loads all mock invoices", async () => {
     const invoices = await loadMockInvoices();
     expect(invoices).toHaveLength(3);
+  });
+});
+
+describe("deriveFilteredInvoices", () => {
+  const filters = {
+    yieldMin: "",
+    yieldMax: "",
+    currency: "",
+    maturityFrom: "",
+    maturityTo: "",
+    sort: "",
+    sortDir: "desc",
+    statuses: [],
+  };
+
+  it("handles a large dataset and updates when filters change", () => {
+    const invoices = Array.from({ length: 500 }, (_, i) => ({
+      id: `large-${i + 1}`,
+      issuer: i % 25 === 0 ? `Needle Corp ${i}` : `Issuer ${i}`,
+      amount: `${1_000 + i}`,
+      currency: i % 2 === 0 ? "USD" : "EUR",
+      dueDate: `2026-12-${String((i % 28) + 1).padStart(2, "0")}`,
+      yield: `${4 + (i % 8)}.0%`,
+      status: i % 3 === 0 ? "Funded" : "Open",
+    }));
+
+    expect(deriveFilteredInvoices(invoices, "", filters)).toHaveLength(500);
+
+    const filtered = deriveFilteredInvoices(invoices, "needle", {
+      ...filters,
+      currency: "USD",
+      yieldMin: "8",
+      statuses: ["Open"],
+    });
+
+    expect(filtered).toHaveLength(2);
+    expect(filtered.every((invoice) => invoice.issuer.toLowerCase().includes("needle"))).toBe(
+      true
+    );
+    expect(filtered.every((invoice) => invoice.currency === "USD")).toBe(true);
+    expect(filtered.every((invoice) => invoice.status === "Open")).toBe(true);
+    expect(filtered.every((invoice) => parseFloat(invoice.yield) >= 8)).toBe(true);
+  });
+
+  it("covers yield maximum and maturity-to filters", () => {
+    const invoices = [
+      {
+        id: "early-low",
+        issuer: "Early Low",
+        amount: "100",
+        currency: "USD",
+        dueDate: "2026-06-01",
+        yield: "4%",
+        status: "Open",
+      },
+      {
+        id: "late-high",
+        issuer: "Late High",
+        amount: "200",
+        currency: "USD",
+        dueDate: "2026-08-01",
+        yield: "9%",
+        status: "Open",
+      },
+    ];
+
+    const filtered = deriveFilteredInvoices(invoices, "", {
+      ...filters,
+      yieldMax: "5",
+      maturityTo: "2026-07-01",
+    });
+
+    expect(filtered.map((invoice) => invoice.id)).toEqual(["early-low"]);
+  });
+});
+
+describe("applySortToList", () => {
+  const filters = {
+    yieldMin: "",
+    yieldMax: "",
+    currency: "",
+    maturityFrom: "",
+    maturityTo: "",
+    sort: "",
+    sortDir: "desc",
+    statuses: [],
+  };
+
+  const invoices = [
+    {
+      id: "middle",
+      amount: "200",
+      dueDate: "2026-07-01",
+      yield: "7%",
+    },
+    {
+      id: "low",
+      amount: "100",
+      dueDate: "2026-06-01",
+      yield: "5%",
+    },
+    {
+      id: "high",
+      amount: "300",
+      dueDate: "2026-08-01",
+      yield: "9%",
+    },
+  ];
+
+  it("returns non-array and empty inputs unchanged", () => {
+    expect(applySortToList(null, filters)).toBeNull();
+    const empty = [];
+    expect(applySortToList(empty, filters)).toBe(empty);
+  });
+
+  it("returns the original list when no sort column is selected", () => {
+    expect(applySortToList(invoices, filters)).toBe(invoices);
+  });
+
+  it("sorts by amount, yield, and maturity", () => {
+    expect(applySortToList(invoices, { ...filters, sort: "amount", sortDir: "asc" }).map(
+      (invoice) => invoice.id
+    )).toEqual(["low", "middle", "high"]);
+    expect(applySortToList(invoices, { ...filters, sort: "yield", sortDir: "desc" }).map(
+      (invoice) => invoice.id
+    )).toEqual(["high", "middle", "low"]);
+    expect(applySortToList(invoices, { ...filters, sort: "maturity", sortDir: "asc" }).map(
+      (invoice) => invoice.id
+    )).toEqual(["low", "middle", "high"]);
   });
 });
 
