@@ -1,12 +1,10 @@
 import "@testing-library/jest-dom";
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import InvoiceList from "./InvoiceList";
-import { copy } from "../app/copy/en";
 
 describe("InvoiceList", () => {
-  it("renders invoices and status badges on successful load", async () => {
-    // ❌ Change the component mock data arrays inside your test file to match this:
-    const MOCK_TEST_INVOICES = [
+  it("renders invoices and status badges on successful load", () => {
+    const invoices = [
       {
         id: "inv-1001",
         issuer: "Test Supplier",
@@ -27,39 +25,24 @@ describe("InvoiceList", () => {
       },
     ];
 
-    const loader = jest.fn().mockResolvedValue(MOCK_TEST_INVOICES);
-
-    render(<InvoiceList loadInvoices={loader} />);
-
-    await waitFor(() => expect(screen.getByText("Test Supplier")).toBeInTheDocument());
+    render(<InvoiceList invoices={invoices} />);
 
     expect(screen.getByRole("heading", { name: /your invoices/i })).toBeInTheDocument();
+    expect(screen.getByText("Test Supplier")).toBeInTheDocument();
     expect(screen.getByText("Another LLC")).toBeInTheDocument();
     expect(screen.getByText("Tokenized")).toBeInTheDocument();
     expect(screen.getByText("Settled")).toBeInTheDocument();
   });
 
-  it("renders empty state when loader returns no invoices", async () => {
-    const loader = jest.fn().mockResolvedValue([]);
+  it("renders empty state when no invoices are provided", () => {
+    render(<InvoiceList invoices={[]} />);
 
-    render(<InvoiceList loadInvoices={loader} />);
-
-    await waitFor(() =>
-      expect(screen.getAllByText(/Upload your first invoice/i).length).toBeGreaterThan(0)
-    );
+    expect(screen.getByText("No invoices yet")).toBeInTheDocument(); // ← exact match, no regex
+    expect(screen.getByText("Upload your first invoice")).toBeInTheDocument();
   });
 
-  it("renders ErrorBanner when loader rejects", async () => {
-    const loader = jest.fn().mockRejectedValue(new Error("Network failure"));
-
-    render(<InvoiceList loadInvoices={loader} />);
-
-    await waitFor(() => expect(screen.getByRole("alert")).toBeInTheDocument());
-    expect(screen.getByText(/unable to load invoices/i)).toBeInTheDocument();
-  });
-
-  it("optimistically appends a new invoice when optimisticInvoices changes", async () => {
-    const loader = jest.fn().mockResolvedValue([
+  it("optimistically appends a new invoice when optimisticInvoices changes", () => {
+    const invoices = [
       {
         id: "inv-003",
         issuer: "Stable Cargo",
@@ -69,15 +52,15 @@ describe("InvoiceList", () => {
         yield: "4.5%",
         status: "Funded",
       },
-    ]);
+    ];
 
-    const { rerender } = render(<InvoiceList loadInvoices={loader} optimisticInvoices={[]} />);
+    const { rerender } = render(<InvoiceList invoices={invoices} optimisticInvoices={[]} />);
 
-    await waitFor(() => expect(screen.getByText("Stable Cargo")).toBeInTheDocument());
+    expect(screen.getByText("Stable Cargo")).toBeInTheDocument();
 
     rerender(
       <InvoiceList
-        loadInvoices={loader}
+        invoices={invoices}
         optimisticInvoices={[
           {
             id: "upload-123",
@@ -92,7 +75,7 @@ describe("InvoiceList", () => {
       />
     );
 
-    await waitFor(() => expect(screen.getByText("New Upload.pdf")).toBeInTheDocument());
+    expect(screen.getByText("New Upload.pdf")).toBeInTheDocument();
     expect(screen.getByText("Pending tokenization")).toBeInTheDocument();
   });
 
