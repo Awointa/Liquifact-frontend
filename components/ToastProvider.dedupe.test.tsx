@@ -38,7 +38,7 @@ function renderWithProvider() {
 }
 
 function getToastStack() {
-  return screen.getByRole("status");
+  return screen.getByTestId("toast-viewport");
 }
 
 function getVisibleToasts() {

@@ -93,7 +93,7 @@ describe("ToastProvider", () => {
     fireEvent.click(screen.getByRole("button", { name: "Trigger error" }));
     fireEvent.click(screen.getByRole("button", { name: "Trigger info" }));
 
-    const liveRegion = screen.getByRole("status");
+    const liveRegion = screen.getByTestId("toast-viewport");
     expect(liveRegion).toHaveAttribute("aria-live", "polite");
 
     expect(within(liveRegion).getByText(/^Success$/)).toBeInTheDocument();
