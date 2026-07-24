@@ -6,17 +6,27 @@
  * Client-only interactive controls for the invoice detail page.
  *
  * This is the **only** file under `app/invest/[id]/` that carries a
- * `"use client"` directive.  It owns:
+ * `"use client"` directive for wallet / clipboard / print interactions.  It
+ * owns:
  *   - Fund invoice button (wallet-state-aware)
  *   - Copy link button (Clipboard API + textarea fallback)
  *   - Print / Save PDF button
  *   - Disclaimer note
  *
- * Everything else on the detail page (heading, metadata table, JSON-LD
- * script) is rendered by the Server Component shell in `page.js`.
+ * Memoization contract
+ * ────────────────────
+ * Local `isCopying` state and wallet-context updates used to re-render the
+ * entire action tree (including `FundAmountInput`) on every change.  The
+ * expensive pieces are now isolated:
+ *   - `isFundingDisabled` is derived via `useMemo`
+ *   - All event handlers are stable via `useCallback`
+ *   - Action buttons and the disclaimer are `memo`'d so a busy copy-link
+ *     state does not re-render siblings whose props are unchanged
+ *   - `FundAmountSection` is `memo`'d so typing unrelated UI state does not
+ *     remount the amount input
  */
 
-import { useCallback, useState } from "react";
+import { memo, useCallback, useMemo, useState } from "react";
 import { useToast } from "@/components/ToastProvider";
 import { useWallet, WALLET_STATES } from "@/components/WalletContext";
 import FundAmountInput from "@/components/FundAmountInput";
@@ -65,6 +75,87 @@ export async function copyInvoiceUrl(id) {
   return url;
 }
 
+// ── Memoized subtrees ─────────────────────────────────────────────────────────
+
+/**
+ * Partial-funding amount input section. Memoized so copy-link / print state
+ * changes in the parent do not re-render the controlled input tree.
+ */
+export const FundAmountSection = memo(function FundAmountSection({
+  maxAmount,
+  currency,
+  yieldValue,
+  onSubmit,
+  disabled,
+}) {
+  return (
+    <div className="no-print mb-6">
+      <FundAmountInput
+        maxAmount={maxAmount}
+        currency={currency ?? "USD"}
+        yieldValue={yieldValue ?? 0}
+        onSubmit={onSubmit}
+        disabled={disabled}
+      />
+    </div>
+  );
+});
+
+/**
+ * Fund / Copy link / Print action button row.
+ */
+export const FundActionButtons = memo(function FundActionButtons({
+  onFund,
+  onCopyLink,
+  onPrint,
+  isFundingDisabled,
+  isCopying,
+}) {
+  return (
+    <div className="no-print flex flex-wrap gap-3">
+      <button
+        type="button"
+        onClick={onFund}
+        disabled={isFundingDisabled}
+        className="rounded-full bg-cyan-500/20 text-cyan-400 px-6 py-3 text-sm font-medium hover:bg-cyan-500/30 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-950 focus:ring-cyan-500 disabled:opacity-50 disabled:cursor-not-allowed"
+        aria-label={detail.fundButtonLabel}
+      >
+        {detail.fundButton}
+      </button>
+
+      <button
+        type="button"
+        onClick={onCopyLink}
+        disabled={isCopying}
+        className="rounded-full border border-slate-700 text-slate-300 px-6 py-3 text-sm font-medium hover:bg-slate-800/50 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-950 focus:ring-cyan-500 disabled:opacity-50"
+        aria-label={detail.copyLinkButtonLabel}
+      >
+        {detail.copyLinkButton}
+      </button>
+
+      <button
+        type="button"
+        onClick={onPrint}
+        className="rounded-full border border-slate-700 text-slate-300 px-6 py-3 text-sm font-medium hover:bg-slate-800 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-950 focus:ring-cyan-500"
+        aria-label={detail.printButtonLabel}
+      >
+        {detail.printButton}
+      </button>
+    </div>
+  );
+});
+
+/**
+ * Static disclaimer note — never depends on interactive state.
+ */
+export const FundDisclaimer = memo(function FundDisclaimer() {
+  return (
+    <div className="no-print mt-6 rounded-xl border border-slate-800 bg-slate-900/30 p-4 text-sm text-slate-300">
+      {detail.disclaimerNote}
+    </div>
+  );
+});
+
 // ── Component ─────────────────────────────────────────────────────────────────
 
 /**
@@ -73,6 +164,9 @@ export async function copyInvoiceUrl(id) {
  * @param {object} props
  * @param {string} props.id          - Invoice id (used to build the share URL)
  * @param {string} props.status      - Invoice status; disables fund button when not "Open"
+ * @param {number} [props.maxAmount]
+ * @param {string} [props.currency]
+ * @param {number} [props.yieldValue]
  */
 export default function FundActions({ id, status, maxAmount, currency, yieldValue }) {
   const { state: walletState, connect } = useWallet();
@@ -81,18 +175,21 @@ export default function FundActions({ id, status, maxAmount, currency, yieldValu
 
   // Fund button is disabled while wallet is connecting or unavailable, or
   // if the invoice is not in an Open state.
-  const isFundingDisabled =
-    walletState === WALLET_STATES.CONNECTING ||
-    walletState === WALLET_STATES.NO_WALLET ||
-    status !== "Open";
+  const isFundingDisabled = useMemo(
+    () =>
+      walletState === WALLET_STATES.CONNECTING ||
+      walletState === WALLET_STATES.NO_WALLET ||
+      status !== "Open",
+    [walletState, status]
+  );
 
-  const handleFund = () => {
+  const handleFund = useCallback(() => {
     if (walletState === WALLET_STATES.DISCONNECTED) {
       connect();
     }
     // When already connected, a real funding flow (sign + submit TX) would
     // be triggered here. Placeholder until Stellar integration lands.
-  };
+  }, [walletState, connect]);
 
   const handleCopyLink = useCallback(async () => {
     if (isCopying) return;
@@ -107,76 +204,50 @@ export default function FundActions({ id, status, maxAmount, currency, yieldValu
     }
   }, [id, isCopying, toast]);
 
-  const handlePrint = () => {
+  const handlePrint = useCallback(() => {
     window.print();
-  };
+  }, []);
 
   // Partial-funding submit: prompt wallet connection when disconnected,
   // otherwise acknowledge the funding request. A real sign+submit flow
   // replaces the toast once the Stellar integration lands.
-  const handleFundAmount = (amount) => {
-    if (walletState === WALLET_STATES.DISCONNECTED) {
-      connect();
-      return;
-    }
-    toast.success(
-      `Funding request for ${amount} ${currency ?? ""} submitted. Awaiting wallet approval.`.trim(),
-      "Funding submitted"
-    );
-  };
+  const handleFundAmount = useCallback(
+    (amount) => {
+      if (walletState === WALLET_STATES.DISCONNECTED) {
+        connect();
+        return;
+      }
+      toast.success(
+        `Funding request for ${amount} ${currency ?? ""} submitted. Awaiting wallet approval.`.trim(),
+        "Funding submitted"
+      );
+    },
+    [walletState, connect, toast, currency]
+  );
+
+  const showFundAmount = status === "Open" && maxAmount != null;
 
   return (
     <>
-      {/* Partial-funding amount input — only when an amount ceiling is known
-          (real detail page) and the invoice is Open. */}
-      {status === "Open" && maxAmount != null && (
-        <div className="no-print mb-6">
-          <FundAmountInput
-            maxAmount={maxAmount}
-            currency={currency ?? "USD"}
-            yieldValue={yieldValue ?? 0}
-            onSubmit={handleFundAmount}
-            disabled={isFundingDisabled}
-          />
-        </div>
-      )}
-
-      {/* Action row */}
-      <div className="no-print flex flex-wrap gap-3">
-        <button
-          type="button"
-          onClick={handleFund}
+      {showFundAmount ? (
+        <FundAmountSection
+          maxAmount={maxAmount}
+          currency={currency}
+          yieldValue={yieldValue}
+          onSubmit={handleFundAmount}
           disabled={isFundingDisabled}
-          className="rounded-full bg-cyan-500/20 text-cyan-400 px-6 py-3 text-sm font-medium hover:bg-cyan-500/30 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-950 focus:ring-cyan-500 disabled:opacity-50 disabled:cursor-not-allowed"
-          aria-label={detail.fundButtonLabel}
-        >
-          {detail.fundButton}
-        </button>
+        />
+      ) : null}
 
-        <button
-          type="button"
-          onClick={handleCopyLink}
-          disabled={isCopying}
-          className="rounded-full border border-slate-700 text-slate-300 px-6 py-3 text-sm font-medium hover:bg-slate-800/50 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-950 focus:ring-cyan-500 disabled:opacity-50"
-          aria-label={detail.copyLinkButtonLabel}
-        >
-          {detail.copyLinkButton}
-        </button>
+      <FundActionButtons
+        onFund={handleFund}
+        onCopyLink={handleCopyLink}
+        onPrint={handlePrint}
+        isFundingDisabled={isFundingDisabled}
+        isCopying={isCopying}
+      />
 
-        <button
-          type="button"
-          onClick={handlePrint}
-          className="rounded-full border border-slate-700 text-slate-300 px-6 py-3 text-sm font-medium hover:bg-slate-800 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-950 focus:ring-cyan-500"
-          aria-label={detail.printButtonLabel}
-        >
-          {detail.printButton}
-        </button>
-      </div>
-
-      {/* Disclaimer */}
-      <div className="no-print mt-6 rounded-xl border border-slate-800 bg-slate-900/30 p-4 text-sm text-slate-300">
-        {detail.disclaimerNote}
-      </div>
+      <FundDisclaimer />
     </>
   );
 }
