@@ -59,10 +59,10 @@ export default function UploadView({ loadInvoices }) {
   const statusMessage = useMemo(() => {
     if (loadError) return copy.invoices.errorStatus || "Unable to load invoices.";
     if (invoices === null) return "Loading invoices...";
-    
+
     const totalCount = (invoices?.length || 0) + optimisticInvoices.length;
     if (totalCount === 0) return copy.invoices.emptyState || "No invoices yet.";
-    
+
     return `${totalCount} invoice${totalCount === 1 ? "" : "s"} available.`;
   }, [invoices, loadError, optimisticInvoices]);
 
@@ -95,10 +95,7 @@ export default function UploadView({ loadInvoices }) {
             <InvoiceListSkeleton rows={3} />
           </div>
         ) : (
-          <InvoiceList 
-            invoices={invoices || []} 
-            optimisticInvoices={optimisticInvoices} 
-          />
+          <InvoiceList invoices={invoices || []} optimisticInvoices={optimisticInvoices} />
         )}
       </div>
     </div>
