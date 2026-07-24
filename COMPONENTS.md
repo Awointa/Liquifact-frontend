@@ -16,6 +16,7 @@ Shared UI components for the LiquiFact frontend. All components live under `comp
 - [InvoiceSearch](#invoicesearch)
 - [InvoiceTimeline](#invoicetimeline)
 - [NavMenu](#navmenu)
+- [Settings](#settings)
 - [StatusPill](#statuspill)
 - [ThemeToggle](#themetoggle)
 - [ToastProvider / useToast](#toastprovider--usetoast)
@@ -622,6 +623,64 @@ import WalletStatus from "@/components/WalletStatus";
 
 // Renders within a ToastProvider (required for connection toasts)
 <WalletStatus />;
+```
+
+---
+
+## Settings
+
+A user-preferences panel that surfaces application-level settings. Currently exposes the theme preference (light / dark / system) by composing [`ThemeToggle`](#themetoggle). The panel renders as a `<section>` landmark with an `aria-labelledby` heading and an accessible label/control association on every preference row.
+
+**File:** `components/Settings.jsx`
+
+### Named exports
+
+| Export           | Description                                                                 |
+| ---------------- | --------------------------------------------------------------------------- |
+| `default` (`Settings`) | The user-preferences panel component                                  |
+| `VALID_HEADINGS` | `['h1','h2','h3','h4','h5','h6']` — the set of accepted `headingLevel` values |
+
+### Props
+
+| Prop           | Type      | Default  | Description                                                                                                                                         |
+| -------------- | --------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `className`    | `string`  | `''`     | Additional Tailwind classes forwarded to the root `<section>` alongside the component's default styles.                                             |
+| `headingLevel` | `string`  | `'h2'`   | HTML heading element for the "Settings" title. Accepts `'h1'`–`'h6'`. Any value outside `VALID_HEADINGS` silently falls back to `'h2'`.             |
+| `showHeading`  | `boolean` | `true`   | When `false`, the heading is rendered with `sr-only` so it is visually hidden but still present in the DOM for `aria-labelledby` resolution.        |
+
+### Internal state
+
+None. All preference state (current theme, persisted value) is owned by the composed `ThemeToggle` component and its underlying `useLocalStorage` hook.
+
+### Preference rows
+
+| Row     | Control        | Persistence           | Description                                      |
+| ------- | -------------- | --------------------- | ------------------------------------------------ |
+| Theme   | `ThemeToggle`  | `localStorage`        | Cycles light → dark → system. See [ThemeToggle](#themetoggle) for the full contract. |
+
+### Accessibility
+
+- The root `<section>` carries `aria-labelledby="settings-heading"` so screen readers announce the region as _"Settings"_ when the user navigates to it.
+- The heading element is always present in the DOM — even when `showHeading=false` applies `sr-only` — so the `aria-labelledby` IDREF never dangles.
+- Each preference row pairs a visible `<label>` with its control via `htmlFor` / `id`, satisfying WCAG 2.1 §1.3.1 (Info and Relationships).
+- Passes `jest-axe` checks for all prop combinations (default, `showHeading=false`, `headingLevel='h3'`).
+
+### Example
+
+```jsx
+import Settings from '@/components/Settings';
+
+// Drop-in panel — default h2 heading, heading visible
+<Settings />
+
+// Nested inside another headed section — downgrade heading to h3
+<section aria-labelledby="account-heading">
+  <h2 id="account-heading">Account</h2>
+  <Settings headingLevel="h3" />
+</section>
+
+// Visually hidden heading (accessible name still present for screen readers)
+<Settings showHeading={false} className="mt-6" />
 ```
 
 ---
