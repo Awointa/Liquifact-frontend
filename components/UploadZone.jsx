@@ -363,7 +363,13 @@ function UploadZone({ onUploadSuccess, progress }) {
         loading={isProcessing}
         aria-disabled={!file || isProcessing}
         className="mt-4 w-full"
-        aria-label={status === 'uploading' ? copy.uploadZone.submitUploading : status === 'tokenizing' ? copy.uploadZone.submitTokenizing : copy.uploadZone.submitIdle}
+        aria-label={
+          status === "uploading"
+            ? copy.uploadZone.submitUploading
+            : status === "tokenizing"
+              ? copy.uploadZone.submitTokenizing
+              : copy.uploadZone.submitIdle
+        }
       >
         {status === "uploading" && copy.uploadZone.submitUploading}
         {status === "tokenizing" && copy.uploadZone.submitTokenizing}

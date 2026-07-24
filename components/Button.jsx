@@ -48,14 +48,7 @@ import Spinner from "./Spinner";
  *   focus management (e.g. `ref.current?.focus()`).
  */
 const Button = forwardRef(function Button(
-  {
-    variant = "primary",
-    loading = false,
-    disabled = false,
-    children,
-    className = "",
-    ...rest
-  },
+  { variant = "primary", loading = false, disabled = false, children, className = "", ...rest },
   ref
 ) {
   /** A button is non-interactive when either explicitly disabled or in a loading state. */
@@ -77,7 +70,8 @@ const Button = forwardRef(function Button(
   /** Per-variant colour schemes. */
   const variantStyles = {
     primary: "bg-cyan-500 text-slate-950 hover:bg-cyan-400 active:bg-cyan-500",
-    secondary: "bg-slate-800 border border-slate-600 text-slate-200 hover:bg-slate-700 active:bg-slate-600",
+    secondary:
+      "bg-slate-800 border border-slate-600 text-slate-200 hover:bg-slate-700 active:bg-slate-600",
     warning: "bg-amber-500 text-slate-950 hover:bg-amber-400 active:bg-amber-500",
     external: "bg-violet-500 text-white hover:bg-violet-400 active:bg-violet-500",
     danger: "bg-red-500 text-white hover:bg-red-400 active:bg-red-500",
