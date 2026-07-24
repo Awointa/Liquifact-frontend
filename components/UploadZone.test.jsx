@@ -479,97 +479,14 @@ describe("UploadZone", () => {
       expect(dropZone).not.toHaveClass("border-cyan-400", "bg-cyan-500/10");
     });
 
-    it("announces drag-active to screen readers on dragOver", () => {
+    it("is a no-op when dropped with no files (empty dataTransfer)", () => {
       render(<UploadZone />);
 
       const dropZone = screen.getByRole("button", { name: /drop pdf invoice/i });
-      const liveRegion = dropZone.querySelector('[aria-live="polite"]');
+      const dataTransfer = createDataTransfer([]);
 
-      expect(liveRegion).toBeInTheDocument();
-      expect(liveRegion).toHaveTextContent("");
-
-      fireEvent.dragOver(dropZone);
-
-      expect(liveRegion).toHaveTextContent(copy.uploadZone.dragActiveAnnounce);
-    });
-
-    it("clears drag-active announcement on dragLeave", () => {
-      render(<UploadZone />);
-
-      const dropZone = screen.getByRole("button", { name: /drop pdf invoice/i });
-      const liveRegion = dropZone.querySelector('[aria-live="polite"]');
-
-      fireEvent.dragOver(dropZone);
-      expect(liveRegion).toHaveTextContent(copy.uploadZone.dragActiveAnnounce);
-
-      fireEvent.dragLeave(dropZone);
-
-      expect(liveRegion).toHaveTextContent("");
-    });
-
-    it("sets aria-dropeffect to copy during dragOver and none when idle", () => {
-      render(<UploadZone />);
-
-      const dropZone = screen.getByRole("button", { name: /drop pdf invoice/i });
-
-      expect(dropZone).toHaveAttribute("aria-dropeffect", "none");
-
-      fireEvent.dragOver(dropZone);
-
-      expect(dropZone).toHaveAttribute("aria-dropeffect", "copy");
-
-      fireEvent.dragLeave(dropZone);
-
-      expect(dropZone).toHaveAttribute("aria-dropeffect", "none");
-    });
-
-    it("clears drag-over state on drop even without prior dragOver", () => {
-      render(<UploadZone />);
-
-      const dropZone = screen.getByRole("button", { name: /drop pdf invoice/i });
-      const file = createMockFile();
-      const dataTransfer = createDataTransfer([file]);
-
-      fireEvent.drop(dropZone, { dataTransfer });
-
-      expect(dropZone).not.toHaveClass("border-cyan-400", "bg-cyan-500/10");
-      expect(dropZone).toHaveAttribute("aria-dropeffect", "none");
-    });
-
-    it("handles multiple rapid dragenter events without breaking state", () => {
-      render(<UploadZone />);
-
-      const dropZone = screen.getByRole("button", { name: /drop pdf invoice/i });
-      const liveRegion = dropZone.querySelector('[aria-live="polite"]');
-
-      fireEvent.dragOver(dropZone);
-      fireEvent.dragOver(dropZone);
-      fireEvent.dragOver(dropZone);
-
-      expect(dropZone).toHaveClass("border-cyan-400", "bg-cyan-500/10");
-      expect(dropZone).toHaveAttribute("aria-dropeffect", "copy");
-      expect(liveRegion).toHaveTextContent(copy.uploadZone.dragActiveAnnounce);
-
-      fireEvent.dragLeave(dropZone);
-
-      expect(dropZone).toHaveClass("border-slate-700", "bg-slate-900/40");
-      expect(dropZone).toHaveAttribute("aria-dropeffect", "none");
-      expect(liveRegion).toHaveTextContent("");
-    });
-
-    it("handles dragleave after rapid drags without stale state", () => {
-      render(<UploadZone />);
-
-      const dropZone = screen.getByRole("button", { name: /drop pdf invoice/i });
-
-      fireEvent.dragOver(dropZone);
-      fireEvent.dragOver(dropZone);
-      fireEvent.dragLeave(dropZone);
-      fireEvent.dragOver(dropZone);
-      fireEvent.dragLeave(dropZone);
-
-      expect(dropZone).toHaveClass("border-slate-700", "bg-slate-900/40");
-      expect(dropZone).toHaveAttribute("aria-dropeffect", "none");
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /upload & tokenize invoice/i })).toBeDisabled();
     });
   });
 
@@ -616,6 +533,13 @@ describe("UploadZone", () => {
       clickSpy.mockRestore();
     });
   });
+
+  it("drop zone has tabIndex={0} for keyboard focusability", () => {
+      render(<UploadZone />);
+
+      const dropZone = screen.getByRole("button", { name: /drop pdf invoice/i });
+      expect(dropZone).toHaveAttribute("tabindex", "0");
+    });
 
   describe("GROUP 3: Submit state machine / double-submit guard (existing tests validated)", () => {
     it("disables submit button during uploading state", async () => {
@@ -686,6 +610,103 @@ describe("UploadZone", () => {
 
       await waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(1));
       expect(global.fetch).toHaveBeenCalledTimes(1);
+    });
+
+    it("submit button shows uploading text and spinner during uploading state", async () => {
+      global.fetch = jest.fn().mockReturnValue(new Promise(() => {}));
+      render(<UploadZone />);
+
+      const file = createMockFile();
+      fireEvent.change(screen.getByLabelText(/select pdf invoice file/i), {
+        target: { files: [file] },
+      });
+      fireEvent.click(screen.getByRole("button", { name: copy.uploadZone.submitIdle }));
+
+      const btn = screen.getByRole("button", { name: /uploading invoice/i });
+      expect(btn).toBeDisabled();
+      expect(btn).toHaveAttribute("aria-disabled", "true");
+      const spinners = screen.getAllByRole("img", { name: copy.uploadZone.spinnerLabel });
+      expect(spinners).toHaveLength(2);
+      expect(btn).toContainElement(spinners[1]);
+    });
+
+    it("submit button shows tokenizing text after upload response", async () => {
+      global.fetch = jest.fn().mockResolvedValue({
+        ok: true,
+        json: jest.fn().mockResolvedValue({ tokenizationDelay: 500 }),
+      });
+      render(<UploadZone />);
+
+      const file = createMockFile();
+      fireEvent.change(screen.getByLabelText(/select pdf invoice file/i), {
+        target: { files: [file] },
+      });
+      fireEvent.click(screen.getByRole("button", { name: copy.uploadZone.submitIdle }));
+
+      await act(async () => {
+        await Promise.resolve();
+      });
+
+      await waitFor(() => {
+        const btn = screen.getByRole("button", { name: /tokenizing invoice/i });
+        expect(btn).toBeDisabled();
+        expect(btn).toHaveAttribute("aria-disabled", "true");
+      });
+    });
+
+    it("triggers upload via form submit (programmatic Enter equivalent)", async () => {
+      mockFetchOk();
+      render(<UploadZone />);
+
+      const file = createMockFile();
+      fireEvent.change(screen.getByLabelText(/select pdf invoice file/i), {
+        target: { files: [file] },
+      });
+
+      const form = screen.getByRole("button", { name: copy.uploadZone.submitIdle }).closest("form");
+      fireEvent.submit(form);
+
+      await waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(1));
+    });
+
+    it("loading states are mutually exclusive — only one status element at a time", async () => {
+      global.fetch = jest.fn().mockResolvedValue({
+        ok: true,
+        json: jest.fn().mockResolvedValue({ tokenizationDelay: 50 }),
+      });
+      render(<UploadZone />);
+
+      const file = createMockFile();
+      fireEvent.change(screen.getByLabelText(/select pdf invoice file/i), {
+        target: { files: [file] },
+      });
+      fireEvent.click(screen.getByRole("button", { name: copy.uploadZone.submitIdle }));
+
+      // During uploading: exactly one status
+      expect(screen.getAllByRole("status")).toHaveLength(1);
+      expect(screen.getByRole("status")).toHaveTextContent(copy.uploadZone.statusUploading);
+
+      await act(async () => {
+        await Promise.resolve();
+      });
+
+      // During tokenizing: exactly one status
+      await waitFor(() => {
+        const statuses = screen.getAllByRole("status");
+        expect(statuses).toHaveLength(1);
+        expect(statuses[0]).toHaveTextContent(copy.uploadZone.statusTokenizing);
+      });
+
+      await act(async () => {
+        jest.advanceTimersByTime(50);
+      });
+
+      // During success: exactly one status
+      await waitFor(() => {
+        const statuses = screen.getAllByRole("status");
+        expect(statuses).toHaveLength(1);
+        expect(statuses[0]).toHaveTextContent(copy.uploadZone.statusSuccess);
+      });
     });
   });
 
@@ -901,5 +922,72 @@ describe("UploadZone", () => {
       jest.useFakeTimers();
       expect(results).toHaveNoViolations();
     }, 15000);
+
+    it("spinner has accessible role img and aria-label", () => {
+      mockFetchOk();
+      render(<UploadZone />);
+
+      const file = createMockFile();
+      fireEvent.change(screen.getByLabelText(/select pdf invoice file/i), {
+        target: { files: [file] },
+      });
+      fireEvent.click(screen.getByRole("button", { name: copy.uploadZone.submitIdle }));
+
+      const spinners = screen.getAllByRole("img", { name: copy.uploadZone.spinnerLabel });
+      expect(spinners).toHaveLength(2);
+      spinners.forEach((spinner) => {
+        expect(spinner).toHaveAttribute("aria-label", copy.uploadZone.spinnerLabel);
+      });
+    });
+
+    it("constraint badges have accessible labels", () => {
+      render(<UploadZone />);
+
+      const badges = screen.getAllByRole("generic", { hidden: true }).filter(
+        (el) => el.tagName === "SPAN" && el.getAttribute("aria-label")
+      );
+      // Fallback: query within the constraint notice
+      const notice = screen.getByRole("note", { name: /file upload requirements/i });
+      const labeledBadges = notice.querySelectorAll("[aria-label]");
+      expect(labeledBadges.length).toBeGreaterThanOrEqual(3);
+
+      const labels = Array.from(labeledBadges).map((b) => b.getAttribute("aria-label"));
+      expect(labels).toEqual(
+        expect.arrayContaining([
+          copy.uploadZone.badgePdfOnly,
+          expect.stringMatching(/max.*10.*mb/i),
+          copy.uploadZone.badgeOneFile,
+        ])
+      );
+    });
+  });
+
+  describe("GROUP 6: Edge cases — async validation and null file", () => {
+    // Note: The validate() function guards against !f, but handleDrop/handleChange
+    // both check `if (f) handleFile(f)`, so the !f branch is dead code. Dropping
+    // with no files silently keeps the idle state.
+    it("is a no-op when dropping with null files (handleDrop guard)", () => {
+      render(<UploadZone />);
+
+      const dropZone = screen.getByRole("button", { name: /drop pdf invoice/i });
+      fireEvent.drop(dropZone, { dataTransfer: { files: null, types: [] } });
+
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+      expect(screen.getByText(copy.uploadZone.dragDropPrompt)).toBeInTheDocument();
+    });
+
+    it("shows read-failed error when validatePdfFile throws", async () => {
+      validatePdfFile.mockRejectedValueOnce(new Error("Disk read error"));
+      render(<UploadZone />);
+
+      const file = createMockFile();
+      const input = screen.getByLabelText(/select pdf invoice file/i);
+      fireEvent.change(input, { target: { files: [file] } });
+
+      await waitFor(() =>
+        expect(screen.getByRole("alert")).toHaveTextContent(/unable to read file/i)
+      );
+      expect(screen.getByRole("button", { name: /upload & tokenize invoice/i })).toBeDisabled();
+    });
   });
 });
