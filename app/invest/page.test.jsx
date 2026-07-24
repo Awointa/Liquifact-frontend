@@ -1,5 +1,6 @@
 import "@testing-library/jest-dom";
-import { act, render, screen, fireEvent, within } from "@testing-library/react";
+import { act, render, screen, fireEvent, within, waitFor } from "@testing-library/react";
+import { useCallback, useState } from "react";
 import InvestPage, {
   getInvoiceLoadAnnouncement,
   getPaginationAnnouncement,
@@ -45,6 +46,7 @@ function createPendingLoader() {
 async function flushTimers(delayMs = 0) {
   await act(async () => {
     jest.advanceTimersByTime(delayMs);
+    await Promise.resolve();
     await Promise.resolve();
   });
 }
@@ -778,6 +780,51 @@ describe("InvestMarketplace", () => {
     expect(screen.getAllByRole("listitem")).toHaveLength(1);
     expect(screen.getByText("Acme Supplies Ltd")).toBeInTheDocument();
     expect(screen.queryByText("Bright Logistics GmbH")).not.toBeInTheDocument();
+  });
+
+  it("does not re-render visible invoice rows when the parent rerenders with unchanged props", async () => {
+    const renderCounts = new Map();
+    const tracker = jest.fn((id) => {
+      renderCounts.set(id, (renderCounts.get(id) ?? 0) + 1);
+    });
+
+    const invoices = makeInvoices(PAGE_SIZE + 2);
+    const loader = jest.fn().mockResolvedValue(invoices);
+
+    function Wrapper() {
+      const [tick, setTick] = useState(0);
+
+      return (
+        <div>
+          <button type="button" onClick={() => setTick((value) => value + 1)}>
+            Rerender parent
+          </button>
+          <InvestMarketplace loadInvoices={loader} rowRenderTracker={tracker} />
+        </div>
+      );
+    }
+
+    let getByRole;
+    await act(async () => {
+      const renderResult = render(<Wrapper />);
+      getByRole = renderResult.getByRole;
+      await Promise.resolve();
+    });
+
+    await waitFor(() => expect(renderCounts.size).toBe(PAGE_SIZE));
+    for (const count of renderCounts.values()) {
+      expect(count).toBe(1);
+    }
+
+    await act(async () => {
+      fireEvent.click(getByRole("button", { name: /Rerender parent/i }));
+      await Promise.resolve();
+    });
+
+    expect(renderCounts.size).toBe(PAGE_SIZE);
+    for (const count of renderCounts.values()) {
+      expect(count).toBe(1);
+    }
   });
 
   it("search is case-insensitive — lowercase query matches mixed-case issuer", async () => {

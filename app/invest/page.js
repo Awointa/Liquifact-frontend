@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import ErrorBanner from "@/components/ErrorBanner";
@@ -50,6 +50,41 @@ export function getPaginationAnnouncement(shown, total) {
   if (total === 0) return copy.invest.announceNoInvoices;
   return copy.invest.announceShowing.replace("{shown}", shown).replace("{total}", total);
 }
+
+const InvestInvoiceRow = memo(function InvestInvoiceRow({ invoice, rowRenderTracker }) {
+  rowRenderTracker?.(invoice.id);
+
+  return (
+    <li className="rounded-xl border border-slate-800 bg-slate-900/50 p-5">
+      <div className="flex items-center justify-between mb-3">
+        <Link
+          href={`/invest/${invoice.id}`}
+          className="font-medium text-slate-100 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-400 rounded"
+        >
+          {invoice.issuer}
+        </Link>
+        <span className="text-xs font-semibold px-2 py-1 rounded-full bg-cyan-900/60 text-cyan-300">
+          {invoice.status}
+        </span>
+      </div>
+      <div className="flex gap-6 text-sm text-slate-400">
+        <span>
+          {invoice.currency}&nbsp;{invoice.amount}
+        </span>
+        <span>
+          {copy.invest.labelYield}
+          {invoice.yield}
+        </span>
+        <span>
+          {copy.invest.labelMaturity}
+          {invoice.dueDate}
+        </span>
+      </div>
+    </li>
+  );
+});
+
+export { InvestInvoiceRow };
 
 /**
  * Parse a numeric amount string like "12,500" → 12500.
@@ -118,9 +153,8 @@ export function applySortToList(list, filters) {
  *   invoice array.  Defaults to the mock loader; injectable for testing.
  * @returns {JSX.Element}
  */
-export function InvestMarketplace({ loadInvoices = loadMockInvoices }) {
+export function InvestMarketplace({ loadInvoices = loadMockInvoices, rowRenderTracker }) {
   const searchParams = useSearchParams();
-  const searchParamsValue = searchParams ?? new URLSearchParams();
 
   const [invoices, setInvoices] = useState(null); // null = loading
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
@@ -227,7 +261,23 @@ export function InvestMarketplace({ loadInvoices = loadMockInvoices }) {
     return applySortToList(list, filters);
   }, [invoices, debouncedSearch, filters]);
 
-  const filterActive = hasAnyActiveFilters(filters, debouncedSearch);
+  const visibleInvoices = useMemo(
+    () => filteredInvoices.slice(0, visibleCount),
+    [filteredInvoices, visibleCount]
+  );
+
+  const invoiceRows = useMemo(
+    () =>
+      visibleInvoices.map((inv) => (
+        <InvestInvoiceRow key={inv.id} invoice={inv} rowRenderTracker={rowRenderTracker} />
+      )),
+    [visibleInvoices, rowRenderTracker]
+  );
+
+  const filterActive = useMemo(
+    () => hasAnyActiveFilters(filters, debouncedSearch),
+    [filters, debouncedSearch]
+  );
 
   /**
    * Effect: fetch invoices on mount and on every retry.
@@ -403,34 +453,7 @@ export function InvestMarketplace({ loadInvoices = loadMockInvoices }) {
         ) : (
           <>
             <ul aria-label={copy.invest.listAriaLabel} className="space-y-4">
-              {filteredInvoices.slice(0, visibleCount).map((inv) => (
-                <li key={inv.id} className="rounded-xl border border-slate-800 bg-slate-900/50 p-5">
-                  <div className="flex items-center justify-between mb-3">
-                    <Link
-                      href={`/invest/${inv.id}`}
-                      className="font-medium text-slate-100 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-400 rounded"
-                    >
-                      {inv.issuer}
-                    </Link>
-                    <span className="text-xs font-semibold px-2 py-1 rounded-full bg-cyan-900/60 text-cyan-300">
-                      {inv.status}
-                    </span>
-                  </div>
-                  <div className="flex gap-6 text-sm text-slate-400">
-                    <span>
-                      {inv.currency}&nbsp;{inv.amount}
-                    </span>
-                    <span>
-                      {copy.invest.labelYield}
-                      {inv.yield}
-                    </span>
-                    <span>
-                      {copy.invest.labelMaturity}
-                      {inv.dueDate}
-                    </span>
-                  </div>
-                </li>
-              ))}
+              {invoiceRows}
             </ul>
             {visibleCount < filteredInvoices.length && (
               <button
