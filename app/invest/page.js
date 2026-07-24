@@ -9,11 +9,14 @@ import InvoiceSearch from "@/components/InvoiceSearch";
 import InvoiceFilters, {
   DEFAULT_FILTERS,
   StatusLegendFilter,
+  WatchlistToggle,
   hasAnyActiveFilters,
   parseSortState,
 } from "@/components/InvoiceFilters";
+import InvoiceCard from "@/components/InvoiceCard";
+import Pagination from "@/components/Pagination";
 import NavMenu from "@/components/NavMenu";
-import { useDebouncedValue } from "@/lib/hooks/useDebouncedValue";
+import useWatchlist from "@/lib/hooks/useWatchlist";
 import { copy } from "../copy/en";
 // Mock data is sourced exclusively from lib.js (single source of truth until the API client lands).
 import { loadMockInvoices } from "./lib";
@@ -49,7 +52,9 @@ export function getInvoiceLoadAnnouncement(invoices, { filterActive, filteredCou
 
 export function getPaginationAnnouncement(shown, total) {
   if (total === 0) return copy.invest.announceNoInvoices;
-  return copy.invest.announceShowing.replace("{shown}", shown).replace("{total}", total);
+  return copy.invest.announceShowing
+    .replace("{shown}", shown)
+    .replace("{total}", total);
 }
 
 /**
@@ -178,6 +183,10 @@ export const InvoiceRow = memo(function InvoiceRow({ invoice: inv, onRender }) {
  * stale in-flight request via AbortController, and re-announces via the
  * polite status region once the new load settles.
  *
+ * Supports a watchlist feature where investors can star invoices for
+ * follow-up.  A watchlist-only view mode composes with the existing
+ * search and filter predicates.
+ *
  * @param {object}   props
  * @param {Function} [props.loadInvoices] - Async function that resolves to an
  *   invoice array.  Defaults to the mock loader; injectable for testing.
@@ -193,6 +202,10 @@ export function InvestMarketplace({ loadInvoices = loadMockInvoices, onInvoiceRo
   const [searchQuery, setSearchQuery] = useState("");
   const [loadError, setLoadError] = useState("");
   const [filters, setFilters] = useState(DEFAULT_FILTERS);
+  const [watchlistOnly, setWatchlistOnly] = useState(false);
+
+  // Watchlist hook — persisted via localStorage
+  const { watchlist, toggleWatch, isWatched, pruneWatchlist } = useWatchlist();
 
   /**
    * Incrementing retryKey causes the load effect to re-run, implementing
@@ -201,9 +214,9 @@ export function InvestMarketplace({ loadInvoices = loadMockInvoices, onInvoiceRo
    */
   const [retryKey, setRetryKey] = useState(0);
 
-  // Reset paging whenever the raw invoice data changes (new fetch, retry, etc.).
-  // Compared during render per the React-recommended pattern:
-  // https://react.dev/learn/you-might-not-need-an-effect
+  // Tracks the invoices reference paging was last reset for. Compared during
+  // render (rather than in an effect) per the React-recommended pattern for
+  // resetting state when a prop/value changes: https://react.dev/learn/you-might-not-need-an-effect
   const [pagingResetFor, setPagingResetFor] = useState(invoices);
   if (invoices !== pagingResetFor) {
     setPagingResetFor(invoices);
@@ -247,21 +260,41 @@ export function InvestMarketplace({ loadInvoices = loadMockInvoices, onInvoiceRo
   const debouncedSearch = useDebouncedValue(searchQuery, SEARCH_DEBOUNCE_MS);
 
 
-  // Reset the visible page count to PAGE_SIZE whenever the filters or debounced
-  // search term change, using the React-sanctioned "adjust state during render"
-  // pattern so the user always starts at the top of the newly filtered list
-  // (avoids a setState-in-effect cascading render).
-  const filterSignature = JSON.stringify([debouncedSearch, filters]);
-  const [prevFilterSignature, setPrevFilterSignature] = useState(filterSignature);
-  if (filterSignature !== prevFilterSignature) {
-    setPrevFilterSignature(filterSignature);
-    setVisibleCount(PAGE_SIZE);
-  }
-
   // Filtered + sorted invoice list
   const filteredInvoices = useMemo(() => {
-    return deriveFilteredInvoices(invoices, debouncedSearch, filters);
-  }, [invoices, debouncedSearch, filters]);
+    if (!Array.isArray(invoices)) return [];
+    let list = invoices;
+
+    if (debouncedSearch.trim()) {
+      const q = debouncedSearch.toLowerCase();
+      list = list.filter((inv) => inv.issuer?.toLowerCase().includes(q));
+    }
+    if (filters.currency) {
+      list = list.filter((inv) => inv.currency === filters.currency);
+    }
+    if (filters.yieldMin !== "") {
+      const min = parseFloat(filters.yieldMin);
+      list = list.filter((inv) => parseYield(inv.yield) >= min);
+    }
+    if (filters.yieldMax !== "") {
+      const max = parseFloat(filters.yieldMax);
+      list = list.filter((inv) => parseYield(inv.yield) <= max);
+    }
+    if (filters.maturityFrom) {
+      list = list.filter((inv) => inv.dueDate >= filters.maturityFrom);
+    }
+    if (filters.maturityTo) {
+      list = list.filter((inv) => inv.dueDate <= filters.maturityTo);
+    }
+    if (Array.isArray(filters.statuses) && filters.statuses.length > 0) {
+      list = list.filter((inv) => filters.statuses.includes(inv.status));
+    }
+    // Watchlist-only filter — composes with all other predicates
+    if (watchlistOnly && Array.isArray(watchlist)) {
+      list = list.filter((inv) => watchlist.includes(inv.id));
+    }
+    return applySortToList(list, filters);
+  }, [invoices, debouncedSearch, filters, watchlistOnly, watchlist]);
 
   const visibleInvoices = useMemo(() => {
     return filteredInvoices.slice(0, visibleCount);
@@ -279,6 +312,8 @@ export function InvestMarketplace({ loadInvoices = loadMockInvoices, onInvoiceRo
    * - retryKey is the sole dependency that forces a re-run on retry; it does
    *   not interact with the abort/isActive logic in any racy way because the
    *   cleanup always runs before the next effect body executes.
+   * - After loading, prune stale watchlist IDs that no longer exist in the API
+   *   response so the watchlist never references missing invoices.
    */
   useEffect(() => {
     let isActive = true;
@@ -294,6 +329,10 @@ export function InvestMarketplace({ loadInvoices = loadMockInvoices, onInvoiceRo
 
         setInvoices(normalizedInvoices);
         setLoadError("");
+
+        // Prune stale watchlist IDs that are no longer returned by the API.
+        const validIds = normalizedInvoices.map((inv) => inv.id);
+        pruneWatchlist(validIds);
       } catch {
         if (!isActive) return;
 
@@ -309,7 +348,8 @@ export function InvestMarketplace({ loadInvoices = loadMockInvoices, onInvoiceRo
       controller.abort();
     };
     // retryKey triggers a fresh load on retry without changing loadInvoices.
-  }, [loadInvoices, retryKey]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loadInvoices, retryKey, pruneWatchlist]);
 
   // Derive the polite live-region announcement directly from reactive state.
   // Using useMemo (rather than a useEffect + setState) avoids a cascading
@@ -369,25 +409,12 @@ export function InvestMarketplace({ loadInvoices = loadMockInvoices, onInvoiceRo
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
-      {/* <header className="border-b border-slate-800 px-6 py-4">
-        <Link
-          href="/"
-          className="inline-block py-3 text-xl font-semibold tracking-tight text-cyan-400 hover:underline"
-        >
-          ← LiquiFact
-        </Link>
-      </header> */}
       <NavMenu />
 
       <main className="max-w-4xl mx-auto px-6 py-12">
-        {/* Visually-styled-but-SR-friendly live region */}
-        <div
-          role="status"
-          aria-live="polite"
-          aria-atomic="true"
-          className={liveAnnouncement ? "mb-4 text-sm text-slate-400 font-medium" : "sr-only"}
-        >
-          {liveAnnouncement}
+        {/* Polite live region – announced to screen readers on every state change */}
+        <div role="status" aria-live="polite" aria-atomic="true" data-testid="marketplace-status" className="sr-only">
+          {statusMessage}
         </div>
 
         <h1 className="text-2xl font-bold mb-2">{copy.invest.title}</h1>
@@ -418,6 +445,21 @@ export function InvestMarketplace({ loadInvoices = loadMockInvoices, onInvoiceRo
           onStatusToggle={handleStatusToggle}
           onClearStatuses={handleClearStatuses}
         />
+
+        {/* Watchlist toggle — interactive, sits outside the disabled filters fieldset */}
+        <div className="mb-4 flex items-center gap-3">
+          <WatchlistToggle
+            active={watchlistOnly}
+            onToggle={setWatchlistOnly}
+            watchlistCount={Array.isArray(watchlist) ? watchlist.length : 0}
+          />
+          {/* Show watchlist size when active */}
+          {watchlistOnly && Array.isArray(watchlist) && watchlist.length > 0 && (
+            <span className="text-xs text-slate-500">
+              Showing {filteredInvoices.length} of {watchlist.length} watched
+            </span>
+          )}
+        </div>
 
         <fieldset
           className="mb-8 rounded-xl border border-slate-800 bg-slate-900/30 p-6"
@@ -462,8 +504,14 @@ export function InvestMarketplace({ loadInvoices = loadMockInvoices, onInvoiceRo
         ) : (
           <>
             <ul aria-label={copy.invest.listAriaLabel} className="space-y-4">
-              {visibleInvoices.map((inv) => (
-                <InvoiceRow key={inv.id} invoice={inv} onRender={onInvoiceRowRender} />
+              {filteredInvoices.slice(0, visibleCount).map((inv) => (
+                <li key={inv.id}>
+                  <InvoiceCard
+                    invoice={inv}
+                    isWatched={isWatched(inv.id)}
+                    onToggleWatch={toggleWatch}
+                  />
+                </li>
               ))}
             </ul>
             {visibleCount < filteredInvoices.length && (

@@ -504,4 +504,734 @@ function SaveButton() {
   return <button onClick={() => toast.success("Changes saved.", "Saved")}>Save</button>;
 }
 ```
+
+---
+
+## UploadZone
+
+Drag-and-drop (or click-to-browse) PDF invoice upload form. Validates the file client-side, then POSTs it to `POST /invoices` on the configured API.
+
+**File:** `components/UploadZone.jsx`
+
+### Props
+
+None — API endpoint is read from `NEXT_PUBLIC_API_URL` (falls back to `http://localhost:3001`).
+
+### Exported constants
+
+| Export             | Description                                                     |
+| ------------------ | --------------------------------------------------------------- |
+| `MAX_UPLOAD_BYTES` | Numeric constant limiting file size to 10 MB (in bytes)         |
+| `FILE_CONSTRAINTS` | Object with `accept`, `mimeType`, `maxSizeMb`, `maxSizeBytes`   |
+| `Spinner`          | Small inline SVG spinner used internally; re-exported for reuse |
+
+### Upload states
+
+| State        | Description                                             |
+| ------------ | ------------------------------------------------------- |
+| `idle`       | Waiting for a file or ready to submit                   |
+| `uploading`  | `fetch` in progress; submit button disabled             |
+| `tokenizing` | Upload succeeded; waiting for server tokenization delay |
+| `success`    | Invoice queued; informational status shown              |
+
+### Validation rules
+
+- **Type:** only `application/pdf` accepted; any other MIME type is rejected.
+- **Size:** file must be ≤ 10 MB (`MAX_UPLOAD_BYTES`). Validation is checked immediately upon file selection via `FILE_CONSTRAINTS`, and additionally enforced before the network `fetch` is triggered to ensure safety.
+
+### Accessibility
+
+- Drop zone renders as `role="button"` with `tabIndex={0}`; activates on `Enter` and `Space`.
+- Errors use `role="alert"` with `aria-live="assertive"`.
+- Progress messages use `role="status"` with `aria-live="polite"`.
+- Upload button carries `aria-disabled` in addition to the native `disabled` attribute.
+
+### Example
+
+```jsx
+import UploadZone from "@/components/UploadZone";
+
+export default function InvoicePage() {
+  return (
+    <main>
+      <h1>Upload Invoice</h1>
+      <UploadZone />
+    </main>
+  );
+}
+```
+
+---
+
+## WalletStatus
+
+Stellar wallet connection UI. Shows a status indicator dot, wallet address / helper text, and an action button whose label adapts to the current connection state.
+
+**File:** `components/WalletStatus.jsx`
+
+---
+
+## Formatting Utilities
+
+Locale-aware numeric formatting helpers for invoice amounts, currencies, and yield values.
+
+**File:** `lib/format/currency.js`
+
+### Exports
+
+| Export           | Description                                                                    |
+| ---------------- | ------------------------------------------------------------------------------ |
+| `formatCurrency` | Formats a numeric value with `Intl.NumberFormat` currency style. Accepts `{ currency, locale }`. |
+| `formatAmount`   | Formats a numeric amount with grouping and no currency symbol.                 |
+
+Both helpers return a safe fallback (`—`) for `null`, `undefined`, `NaN`, empty strings, and non-numeric strings. `InvoiceCard` reuses `formatCurrency` for the amount cell and `formatAmount` for yield text before appending a single percent sign, keeping card, skeleton-aligned rows, and detail-page formatting consistent without injecting unescaped HTML.
+
+> **Note:** Wallet connection is currently mocked for UI development. Replace the `connectWallet` internals with real Freighter / wallet-kit calls when integrating. See [WALLET_INTEGRATION_CONTRACT.md](WALLET_INTEGRATION_CONTRACT.md).
+
+### Props
+
+None — all state is managed internally.
+
+### Connection states
+
+| State           | Dot colour     | Button label     | Description                              |
+| --------------- | -------------- | ---------------- | ---------------------------------------- |
+| `disconnected`  | Grey           | Connect Wallet   | Initial state; no wallet linked          |
+| `connecting`    | Yellow (pulse) | Connecting…      | Awaiting wallet approval                 |
+| `connected`     | Green          | Disconnect       | Wallet linked; address and balance shown |
+| `error`         | Red            | Retry Connection | Connection attempt failed                |
+| `wrong_network` | Red            | Switch Network   | Wallet is on testnet instead of public   |
+| `no_wallet`     | Grey           | Install Wallet   | No Stellar wallet extension detected     |
+
+### Exported constants
+
+| Export          | Description                          |
+| --------------- | ------------------------------------ |
+| `WALLET_STATES` | Object of all state string constants |
+
+### Accessibility
+
+- Status dot is `aria-hidden`; the `sr-only` live region (`aria-live="polite"`, `role="status"`) announces state changes to screen readers.
+- Action button has `aria-label` matching the visible button text.
+- Button links `aria-describedby` to a hidden helper-text element.
+
+### Example
+
+```jsx
+import WalletStatus from "@/components/WalletStatus";
+
+// Renders within a ToastProvider (required for connection toasts)
+<WalletStatus />;
+```
+
+---
+
+## StatusPill
+
+The single source of truth for rendering an invoice-status badge. Used on the marketplace card (`InvoiceCard`) and the detail `dl` so label, tone, and accessibility metadata stay in lock-step across both surfaces.
+
+**File:** `components/StatusPill.jsx`
+
+### Status vocabulary
+
+The exhaustive set of invoice-status values lives in `lib/types/invoice.js`:
+
+| Constant                   | Value       | Label rendered        | Tone (Tailwind)                                  |
+| -------------------------- | ----------- | --------------------- | ------------------------------------------------ |
+| `INVOICE_STATUSES.OPEN`    | `"Open"`    | `Open`                | cyan (`bg-cyan-900/40 text-cyan-300`)            |
+| `INVOICE_STATUSES.FUNDED`  | `"Funded"`  | `Funded`              | muted slate (`bg-slate-700/40 text-slate-400`)   |
+| `INVOICE_STATUSES.SETTLED` | `"Settled"` | `Settled`             | emerald (`bg-emerald-900/30 text-emerald-300`)   |
+| `INVOICE_STATUSES.OVERDUE` | `"Overdue"` | `Overdue by maturity` | amber (`bg-amber-900/40 text-amber-300`)         |
+| _(none — fallback)_        | `null`      | `Unknown`             | neutral slate (`bg-slate-800/60 text-slate-400`) |
+
+`INVOICE_STATUSES` and `STATUS_PILL_MAP` are both `Object.freeze`-immutable so the canonical vocabulary cannot drift at runtime.
+
+### Props
+
+| Prop        | Type      | Default | Description                                                                                                                |
+| ----------- | --------- | ------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `status`    | `unknown` | —       | Any invoice status value. Strings outside `INVOICE_STATUSES` (and all nullish / non-string inputs) fall back to `Unknown`. |
+| `className` | `string`  | `""`    | Optional Tailwind classes appended to the tone classes. Layout-spacing only; never override tone colours.                  |
+
+### Behaviour
+
+- Reads `INVOICE_STATUSES` and `STATUS_PILL_MAP` from `lib/types/invoice.js` — the only place to add a new status is to update **all three** tables (the enum, the map entry, and this contract).
+- Always renders a visible pill. **Unknown / nullish / empty input → `Unknown`** neutral pill, never throws, never renders the raw input, never renders an empty `<span>`.
+- The rendered `<span>` carries a `data-status` attribute whose value is the canonical key (`"Open" | "Funded" | "Settled" | "Overdue" | "Unknown"`). Use this for tests and `InvoiceCard` wiring.
+- Purely presentational — never a `<button>`, never focusable.
+
+### Accessibility
+
+- `role="status"` so screen readers announce state changes.
+- `aria-label` reads `"Status: <label>"` — the same word rendered inside the pill. **Colour is never load-bearing.**
+- Status is conveyed by **text**, not by colour alone, satisfying WCAG 2.1 §1.4.1 (Use of Color).
+
+### Example
+
+```jsx
+import StatusPill from '@/components/StatusPill';
+
+// Marketplace card
+<StatusPill status={invoice.status} />
+
+// Detail page definition list
+<dl>
+  <dt>Status</dt>
+  <dd><StatusPill status={invoice.status} /></dd>
+</dl>
+
+// Neutral fallback (null, undefined, unknown strings, etc.)
+<StatusPill status={null} />             // → "Unknown" pill
+<StatusPill status="legacy-available" /> // → "Unknown" pill
+```
+
+---
+
+## StatusLegendFilter
+
+A compact, toggleable chip row that lets investors filter the Invest marketplace by one or more invoice statuses. The chip set is derived from `INVOICE_STATUSES` in `lib/types/invoice.js` so it never drifts from the canonical status vocabulary and `STATUS_PILL_MAP` tones.
+
+**File:** `components/InvoiceFilters.jsx` (named export `StatusLegendFilter`)
+
+### Props
+
+| Prop               | Type       | Default | Description                                                                                     |
+| ------------------ | ---------- | ------- | ----------------------------------------------------------------------------------------------- |
+| `selectedStatuses` | `string[]` | `[]`    | Currently active status values. Must be values from `INVOICE_STATUSES`.                         |
+| `onStatusToggle`   | `Function` | —       | **Required.** Called with the status string that was clicked (add if absent, remove if present). |
+| `onClearStatuses`  | `Function` | —       | Called when the "Clear" button is clicked. Shown only when at least one status is selected.     |
+
+### Behaviour
+
+- Each chip is a `<button>` with `aria-pressed` — toggling is keyboard-operable and screen-reader-friendly.
+- Multiple selections use a union (OR) — all invoices whose status matches any selected chip are shown.
+- When `selectedStatuses` is empty all invoices are visible (no filtering applied).
+- An unknown status chip value falls back to the neutral `Unknown` pill tone from `STATUS_PILL_MAP`.
+
+### Accessibility
+
+- Chip group is wrapped with `role="group"` and `aria-label="Filter by status"`.
+- Every chip exposes `aria-pressed` (`"true"` / `"false"`).
+- The Clear button carries `aria-label="Clear status filters"`.
+- Selected chip styling reuses the `STATUS_PILL_MAP` tone classes so colour is always paired with a visible text label (WCAG 2.1 §1.4.1 satisfied).
+- All interactive elements have a visible `focus-visible:ring` outline.
+
+### Integration in `app/invest/page.js`
+
+The component is rendered above the filter fieldset. Status filtering is applied in the `filteredInvoices` useMemo. The `DEFAULT_FILTERS` object includes a `statuses: []` field.
+
+```jsx
+import { StatusLegendFilter } from '@/components/InvoiceFilters';
+
+<StatusLegendFilter
+  selectedStatuses={filters.statuses}
+  onStatusToggle={handleStatusToggle}
+  onClearStatuses={handleClearStatuses}
+/>
+```
+
+### Example
+
+```jsx
+// No selection — shows all invoices
+<StatusLegendFilter selectedStatuses={[]} onStatusToggle={toggle} onClearStatuses={clear} />
+
+// Single status selected
+<StatusLegendFilter selectedStatuses={['Open']} onStatusToggle={toggle} onClearStatuses={clear} />
+
+// Multi-status union (Open OR Overdue)
+<StatusLegendFilter selectedStatuses={['Open', 'Overdue']} onStatusToggle={toggle} onClearStatuses={clear} />
+```
+
+---
+
+## InvoiceDetail (page)
+
+Invoice detail view rendered at `/invest/[id]`. Shows the full terms of a single invoice and provides fund, share, and print/Save PDF actions.
+
+**File:** `app/invest/[id]/page.js`
+
+### Exports
+
+| Export                       | Description                                                        |
+| ---------------------------- | ------------------------------------------------------------------ |
+| `InvoiceDetail`              | The presentational component (accepts injectable `loadInvoice`)    |
+| `default` (page wrapper)     | App Router page that renders `<InvoiceDetail />`                   |
+| `copyInvoiceUrl(id)`         | Async helper that copies `/invest/{id}` URL to clipboard           |
+| `copyToClipboardFallback(text)` | Creates a hidden textarea and uses `execCommand('copy')`        |
+
+### Action buttons
+
+When an invoice is loaded, three buttons appear:
+
+- **"Fund this invoice"** — connects wallet or funds the invoice
+- **"Copy link"** — writes `{origin}/invest/{id}` to clipboard via `navigator.clipboard.writeText()` (preferred) or `document.execCommand('copy')` (fallback); shows success/error toast
+- **"Print / Save PDF"** — calls `window.print()` to trigger the browser's native print dialog
+
+### Accessibility
+
+- All three buttons are `<button type="button">` with descriptive `aria-label` attributes that stay constant.
+- Confirmation is announced via the toast system's `aria-live="polite"` container, so screen readers hear the success/error message without shifting layout.
+
+---
+
+## ThemeToggle
+
+A button that cycles through **light → dark → system** theme preferences, persists the choice to `localStorage`, and applies a `data-theme` attribute on `<html>` so CSS tokens update instantly.
+
+**File:** `components/ThemeToggle.jsx`
+
+### Named exports
+
+| Export                    | Description                                                                              |
+| ------------------------- | ---------------------------------------------------------------------------------------- |
+| `default` (`ThemeToggle`) | The toggle button component                                                              |
+| `THEMES`                  | `['light', 'dark', 'system']` — the ordered cycle                                        |
+| `THEME_STORAGE_KEY`       | `localStorage` key used to persist the preference                                        |
+| `resolveTheme(pref)`      | Maps a preference string to `'light'` or `'dark'` (resolves `'system'` via `matchMedia`) |
+| `readStoredTheme()`       | Reads from `localStorage`, returning `'system'` as fallback                              |
+| `applyTheme(pref)`        | Sets `data-theme` on `document.documentElement`                                          |
+
+### Props
+
+| Prop        | Type     | Default | Description                                    |
+| ----------- | -------- | ------- | ---------------------------------------------- |
+| `className` | `string` | `''`    | Extra classes forwarded to the root `<button>` |
+
+### How it works
+
+1. **Pre-paint inline script** in `app/layout.js` reads `localStorage` before React hydrates and sets `data-theme` on `<html>` via `dangerouslySetInnerHTML`. This eliminates the flash of incorrect theme on first load.
+2. **On mount**, the component reads the stored preference and syncs React state.
+3. **On click**, cycles `system → light → dark → system`, writes to `localStorage`, and calls `applyTheme`.
+4. **OS change listener**: when preference is `'system'`, a `matchMedia` listener re-applies the theme if the user toggles their OS setting.
+
+### Theme cycle
+
+```
+system (monitor icon)  →  light (sun icon)  →  dark (moon icon)  →  system …
+```
+
+### Accessibility
+
+- `aria-label` describes the **current** theme and the next option (e.g. `"Theme: Dark (click for System)"`).
+- `aria-pressed` is `true` for explicit `light`/`dark` choices and `false` for `system`.
+- All SVG icons carry `aria-hidden="true"` and `focusable="false"`.
+- Button has `id="theme-toggle"` for automated testing and skip-link targeting.
+- Keyboard-focusable with `focus-visible:outline` following the site ring pattern.
+
+### CSS tokens consumed
+
+| Token             | Dark (`[data-theme="dark"]`) | Light (`[data-theme="light"]`) |
+| ----------------- | ---------------------------- | ------------------------------ |
+| `--color-bg`      | `#020617` (slate-950)        | `#f8fafc` (slate-50)           |
+| `--color-fg`      | `#f1f5f9` (slate-100)        | `#0f172a` (slate-900)          |
+| `--color-muted`   | `#94a3b8` (slate-400)        | `#64748b` (slate-500)          |
+| `--color-surface` | `#0f172a` (slate-900)        | `#ffffff` (white)              |
+| `--color-border`  | `#1e293b` (slate-800)        | `#e2e8f0` (slate-200)          |
+| `--color-primary` | `#22d3ee` (cyan-400)         | `#0891b2` (cyan-600)           |
+
+### Example
+
+```jsx
+import ThemeToggle from '@/components/ThemeToggle';
+
+// Renders inside any layout — no provider required
+<ThemeToggle />
+
+// With extra positioning class
+<ThemeToggle className="ml-4" />
+```
+
+---
+
+## FundAmountInput
+
+A partial-funding amount input with live validation, expected-yield preview, and accessible inline error messages. Replaces the all-or-nothing fund button on the invoice detail page.
+
+**File:** `components/FundAmountInput.jsx`
+
+### Named exports
+
+| Export                | Description                                                                 |
+| --------------------- | --------------------------------------------------------------------------- |
+| `default`             | The controlled input form component                                         |
+| `validateFundAmount`  | Pure validation function — use in tests or server-side validation           |
+| `deriveExpectedYield` | Pure calculation — derives the expected yield amount for a partial funding  |
+
+### Props
+
+| Prop        | Type       | Default     | Description                                                                             |
+| ----------- | ---------- | ----------- | --------------------------------------------------------------------------------------- |
+| `maxAmount` | `number`   | —           | **Required.** Maximum fundable balance (the invoice's `amountValue`).                   |
+| `currency`  | `string`   | —           | **Required.** Invoice currency code (e.g. `"USD"`, `"EUR"`). Controls decimal precision. |
+| `yieldValue`| `number`   | —           | **Required.** Invoice yield rate as a percentage number (e.g. `8.2` for 8.2%).         |
+| `onSubmit`  | `function` | `undefined` | Called with the validated numeric amount on submit. May be async.                       |
+| `disabled`  | `boolean`  | `false`     | Disables the input and submit button externally (e.g. wallet is connecting).            |
+
+### Validation rules
+
+All validation is performed by the exported `validateFundAmount(rawValue, maxAmount, currency)` function:
+
+| Rule                  | Error copy key                         | Detail                                                                 |
+| --------------------- | -------------------------------------- | ---------------------------------------------------------------------- |
+| Non-empty             | `invest.fundAmount.errorRequired`      | Empty or whitespace-only input                                         |
+| Numeric               | `invest.fundAmount.errorRequired`      | Non-numeric input                                                      |
+| Positive              | `invest.fundAmount.errorPositive`      | Zero or negative values                                                |
+| ≤ max balance         | `invest.fundAmount.errorExceedsBalance`| Amount exceeds the invoice `amountValue`                               |
+| Decimal precision     | `invest.fundAmount.errorPrecision`     | Exceeds allowed decimal places for the currency (2 for USD, 0 for JPY) |
+
+### Copy keys used
+
+All strings are sourced from `app/copy/en.js` under the `invest.fundAmount` namespace:
+
+| Key                    | Purpose                                         |
+| ---------------------- | ----------------------------------------------- |
+| `label`                | Input label                                     |
+| `placeholder`          | Input placeholder                               |
+| `helper`               | Helper text with `{max}` and `{currency}` tokens|
+| `expectedYieldLabel`   | Label prefix for the yield preview              |
+| `errorRequired`        | Validation error for empty / non-numeric input  |
+| `errorPositive`        | Validation error for zero or negative values    |
+| `errorExceedsBalance`  | Validation error with `{max}` and `{currency}`  |
+| `errorPrecision`       | Validation error with `{decimals}` and `{currency}` |
+| `submitLabel`          | Submit button label                             |
+| `submittingLabel`      | Submit button label while in flight             |
+
+### Accessibility
+
+- The `<input>` is linked to its helper text and error message via `aria-describedby`. The IDs are generated with `useId()` so they are unique even if the component appears more than once on a page.
+- `aria-invalid="true"` is set on the input when a validation error is visible (after the user has blurred the field or attempted to submit).
+- The error message is rendered with `role="alert"` and `aria-live="polite"` so screen readers announce it without requiring focus to move to the error.
+- The expected-yield preview region carries `aria-live="polite"` so screen readers announce live yield updates as the user types.
+- The submit `<Button>` is disabled (and `aria-busy` is set via the `Button` component's `loading` prop) while submission is in flight.
+
+### Example
+
+```jsx
+import FundAmountInput from "@/components/FundAmountInput";
+
+// On the invoice detail page for an Open invoice
+<FundAmountInput
+  maxAmount={invoice.amountValue}
+  currency={invoice.currency}
+  yieldValue={invoice.yieldValue}
+  onSubmit={async (amount) => {
+    await fundInvoiceOnChain(invoice.id, amount);
+  }}
+  disabled={walletState !== "connected"}
+/>
+```
+
+### Exported utility functions
+
+#### `validateFundAmount(rawValue, maxAmount, currency)`
+
+Returns a localized error string on failure, or `null` when the value is valid.
+
+```js
+import { validateFundAmount } from "@/components/FundAmountInput";
+
+validateFundAmount("", 10000, "USD");       // "Please enter an amount."
+validateFundAmount("0", 10000, "USD");      // "Amount must be greater than zero."
+validateFundAmount("99999", 10000, "USD"); // "Amount cannot exceed …"
+validateFundAmount("100.999", 10000, "USD"); // "Amount must not exceed 2 decimal places …"
+validateFundAmount("500", 10000, "USD");   // null (valid)
+```
+
+#### `deriveExpectedYield(enteredAmount, totalAmount, yieldValue)`
+
+Returns the expected yield as a numeric amount.
+
+```js
+import { deriveExpectedYield } from "@/components/FundAmountInput";
+
+deriveExpectedYield(5000, 10000, 8.2); // 410  (5000 × 8.2% = $410 yield)
+deriveExpectedYield(10000, 10000, 8.2); // 820 (full amount)
+```
+
+---
+
+## Hooks
+
+Reusable React hooks that live under `lib/hooks/`. Hooks are the canonical home for shared persistence and behaviour so any feature can adopt the same contract without re-implementing edge cases (SSR safety, quota errors, type preservation).
+
+### `useLocalStorage`
+
+A drop-in `useState`-shaped hook for `window.localStorage` with **SSR-safe hydration**, **JSON parse guarding**, and **quota/SecurityError guarding**. The single shared implementation that wallet / preferences / any future persistable feature must consume.
+
+**File:** `lib/hooks/useLocalStorage.js`
+
+#### Signature
+
+```jsx
+const [value, setValue] = useLocalStorage < T > (key, defaultValue);
+```
+
+| Argument         | Type                               | Description                                                                         |
+| ---------------- | ---------------------------------- | ----------------------------------------------------------------------------------- |
+| `key`            | `string`                           | Required. Storage key. Empty / non-string keys are defensive-no-ops (no throw).     |
+| `defaultValue`   | `T \| (() => T)`                   | Initial value or lazy initialiser. Returned on the very first render.               |
+| Returns value    | `T`                                | Current state. Defaults to `defaultValue` on first render, then rehydrates.         |
+| Returns setValue | `(next \| (prev) => next) => void` | Stable setter. Accepts either a value or a functional updater (mirrors `useState`). |
+
+#### SSR-safety contract
+
+- **Initial render never reads from storage.** Whatever `defaultValue` is, that is what every consumer sees on first render (server-side and the first client render). This is the rule that keeps React hydration safe in a Next.js app router context.
+- The actual read happens inside `useEffect`, after the component mounts on the client. JSON-parse failures, missing entries, and `localStorage.getItem` itself throwing (e.g. private-browsing SecurityError) are **all swallowed** — the hook falls back to `defaultValue` so React never sees an exception.
+- `setValue` does not access `window` at module scope or during render; the window check sits inside the setter callback so the rule is enforced on every write.
+
+#### Write-through contract
+
+- `setValue(next)` writes `JSON.stringify(next)` to `localStorage` AND updates React state in lock-step. **Quota errors and SecurityError are swallowed** so the UI keeps working even when the browser refuses the write — React state still updates so the in-memory value is correct.
+- `setValue(prev => next)` is the canonical functional updater form. Sequential calls inside `act()` correctly accumulate.
+- `setValue(undefined)` removes the storage key (`removeItem`) and leaves React state at `undefined`. This is the React idiom for "unset"; no other value triggers a removal.
+
+#### Stability
+
+- The setter is referentially stable across renders when `key` does not change. Safe to put in dependency arrays.
+- Changing `key` mid-lifecycle triggers a re-read from `localStorage` for the new key.
+
+#### Caveats (intentional non-features)
+
+- **No auto-rehydration after mount.** Within the same tab, two `useLocalStorage('key', …)` instances do **not** auto-sync each other's writes — each one rehydrates only when it first mounts (initial render → mount effect) or when its `key` prop changes. Consumers that need shared-state semantics across many components should centralise through React Context on top of this hook.
+- **No cross-tab sync.** A write in tab A does not auto-propagate to tab B. The pre-paint inline script in `app/layout.js` (theme toggle) handles initial-paint sync; live cross-tab sync is out of scope.
+- **No automatic debouncing.** Rapid `setValue` calls produce one `setItem` per call. The setter is cheap, but consumers that need debouncing should layer it on top (typical for text inputs).
+- **Stored value types must round-trip through JSON.** Functions, classes, and other non-serialisable values will not survive a round-trip. Compose with a serialisation layer if you need that.
+
+#### Example
+
+```jsx
+'use client';
+
+import { useLocalStorage } from '@/lib/hooks/useLocalStorage';
+
+// Primitive — typed default surfaces string.
+const [theme, setTheme] = useLocalStorage<'light' | 'dark' | 'system'>(
+  'lhf:theme',
+  'system',
+);
+
+// Object — generic preserves the shape.
+const [wallet, setWallet] = useLocalStorage<{ address?: string; network?: string }>(
+  'lhf:wallet-snapshot',
+  {},
+);
+
+// Functional updater.
+setWallet((prev) => ({ ...prev, network: 'PUBLIC' }));
+
+// Reset.
+setWallet(undefined);
+```
+
+---
+
+### `useWatchlist`
+
+A persisted watchlist hook built on top of `useLocalStorage`. Manages a set of invoice IDs that the investor has "starred" for follow-up. The watchlist survives page reloads and browser sessions.
+
+**File:** `lib/hooks/useWatchlist.js`
+
+#### Return value
+
+| Property          | Type                  | Description                                                               |
+| ----------------- | --------------------- | ------------------------------------------------------------------------- |
+| `watchlist`       | `string[]`            | Array of watched invoice IDs                                              |
+| `toggleWatch`     | `(invoiceId) => void` | Add or remove an ID from the watchlist                                    |
+| `isWatched`       | `(invoiceId) => bool` | Check whether an ID is currently watched                                  |
+| `pruneWatchlist`  | `(validIds) => void`  | Remove IDs not in `validIds` — use after loading to clean stale references |
+
+#### Behaviour
+
+- Initialised as an empty array. After mount, the stored value is read from `localStorage` under `"liquifact:watchlist"`.
+- `toggleWatch(invoiceId)` adds the ID if absent and removes it if present.
+- `pruneWatchlist(validIds)` filters the watchlist to only include IDs present in the supplied array. Call this after loading invoices from the API to prune stale references to invoices that no longer exist.
+- All side-effects are safe for SSR (delegates to `useLocalStorage` which never reads or writes storage during render).
+- The returned object is memoised so it can be used in dependency arrays without causing infinite re-renders.
+
+#### Example
+
+```jsx
+'use client';
+
+import useWatchlist from "@/lib/hooks/useWatchlist";
+
+function InvoiceCard({ invoice }) {
+  const { watchlist, toggleWatch, isWatched } = useWatchlist();
+  const watched = isWatched(invoice.id);
+
+  return (
+    <div>
+      <button
+        type="button"
+        aria-pressed={watched}
+        aria-label={watched ? `Unstar invoice ${invoice.id}` : `Star invoice ${invoice.id}`}
+        onClick={() => toggleWatch(invoice.id)}
+      >
+        {watched ? "\u2605" : "\u2606"}
+      </button>
+      {/* invoice details */}
+    </div>
+  );
+}
+
+// Prune stale IDs after loading from API
+const { pruneWatchlist } = useWatchlist();
+useEffect(() => {
+  fetchInvoices().then((invoices) => {
+    setInvoices(invoices);
+    pruneWatchlist(invoices.map((inv) => inv.id));
+  });
+}, []);
+```
+
+---
+
+### `WatchlistToggle`
+
+A toggle button that switches between "all invoices" and "watchlist only" views. Composes with the existing search and filter predicates — when watchlist-only is active, the current search + filter results are further narrowed to watched invoices.
+
+**File:** `components/InvoiceFilters.jsx` (named export `WatchlistToggle`)
+
+#### Props
+
+| Prop             | Type       | Default | Description                                                      |
+| ---------------- | ---------- | ------- | ---------------------------------------------------------------- |
+| `active`         | `boolean`  | —       | Whether watchlist-only mode is currently active                  |
+| `onToggle`       | `Function` | —       | Called with the next boolean value when the button is clicked    |
+| `watchlistCount` | `number`   | `0`     | Current number of watched invoices; shown as a badge when > 0    |
+
+#### Behaviour
+
+- Renders with `aria-pressed` to communicate the toggle state.
+- Displays a star icon (filled when active, outline when inactive).
+- When not active and `watchlistCount > 0`, shows a badge with the count.
+- Active state uses amber-300 text on amber-900/20 background for visual distinction.
+
+#### Accessibility
+
+- `aria-pressed` communicates toggle state to screen readers.
+- `aria-label` on the button reads `"Show all invoices"` or `"Show watchlist only"` depending on the current state.
+- The star icon SVG carries `aria-hidden="true"`.
+- `focus-visible:ring` for keyboard visibility.
+
+#### Integration in `app/invest/page.js`
+
+The toggle is rendered outside the disabled filter fieldset so it stays interactive. Watchlist filtering is applied in the `filteredInvoices` useMemo — when `watchlistOnly` is true, only invoices whose IDs are in the watchlist are shown.
+
+```jsx
+import { WatchlistToggle } from '@/components/InvoiceFilters';
+import useWatchlist from '@/lib/hooks/useWatchlist';
+
+function InvestMarketplace() {
+  const [watchlistOnly, setWatchlistOnly] = useState(false);
+  const { watchlist, isWatched, toggleWatch } = useWatchlist();
+
+  return (
+    <>
+      <WatchlistToggle
+        active={watchlistOnly}
+        onToggle={setWatchlistOnly}
+        watchlistCount={watchlist.length}
+      />
+      {invoices.map((inv) => (
+        <InvoiceCard
+          key={inv.id}
+          invoice={inv}
+          isWatched={isWatched(inv.id)}
+          onToggleWatch={toggleWatch}
+        />
+      ))}
+    </>
+  );
+}
+```
+
+---
+
+### `InvoiceCard` — star toggle
+
+`InvoiceCard` optionally displays a star (watchlist) toggle button when the `onToggleWatch` callback is provided. The toggle button uses `aria-pressed` to communicate its state and includes the invoice reference in its accessible name.
+
+**File:** `components/InvoiceCard.jsx`
+
+#### Additional props
+
+| Prop           | Type       | Default | Description                                                        |
+| -------------- | ---------- | ------- | ------------------------------------------------------------------ |
+| `isWatched`    | `boolean`  | `false` | Whether this invoice is currently in the watchlist                 |
+| `onToggleWatch`| `Function` | —       | Called with the invoice ID when the star button is clicked. When omitted, the star button is not rendered. |
+
+#### Example with watchlist
+
+```jsx
+import InvoiceCard from '@/components/InvoiceCard';
+import useWatchlist from '@/lib/hooks/useWatchlist';
+
+function Marketplace() {
+  const { isWatched, toggleWatch } = useWatchlist();
+
+  return (
+    <ul>
+      {invoices.map((inv) => (
+        <li key={inv.id}>
+          <InvoiceCard
+            invoice={inv}
+            isWatched={isWatched(inv.id)}
+            onToggleWatch={toggleWatch}
+          />
+        </li>
+      ))}
+    </ul>
+  );
+}
+```
+
+---
+
+## Design tokens
+
+Global tokens defined in `app/globals.css` and driven by the `[data-theme]` attribute (set by `ThemeToggle`).
+
+| Token             | Dark value          | Light value         |
+| ----------------- | ------------------- | ------------------- |
+| `--color-bg`      | `#020617` slate-950 | `#f8fafc` slate-50  |
+| `--color-fg`      | `#f1f5f9` slate-100 | `#0f172a` slate-900 |
+| `--color-primary` | `#22d3ee` cyan-400  | `#0891b2` cyan-600  |
+
+Dark is the `:root` default (backwards-compatible). Light overrides activate via `[data-theme="light"]`.
+
+Font: **Geist** via `next/font/google`. Headings use `font-bold`; body copy uses the default weight.
+
+---
+
+## Print behavior — Invoice Detail page
+
+**File:** `app/invest/[id]/page.js`
+
+The invoice detail page (`/invest/[id]`) supports printing and PDF export via a `@media print` block in `app/globals.css`.
+
+### How it works
+
+- A **"Print / Save PDF"** button appears below the Fund button on the detail page. Clicking it calls `window.print()`, which triggers the browser's native print/save-as-PDF dialog.
+- The button has `aria-label="Print or save this invoice as PDF"` and is keyboard-reachable.
+- Interactive chrome (nav header, wallet widget, back link, Fund button, disclaimer note, and the print button itself) all carry the `no-print` CSS class, which the print stylesheet hides with `display: none !important`.
+- The invoice summary `<section>` carries the `print-invoice-section` class, which forces a white background and dark text for ink-efficient output.
+
+### CSS classes
+
+| Class                   | Purpose                                                    |
+| ----------------------- | ---------------------------------------------------------- |
+| `no-print`              | Hides element in `@media print` (nav, buttons, disclaimer) |
+| `print-invoice-section` | Forces white bg and dark text on the invoice facts panel   |
+| `print-page-wrapper`    | Resets page-level dark background to white when printing   |
+
+### Printed fields
+
+The printed / PDF output shows only the invoice's core fields:
+
+- Issuer
+- Amount (with currency)
+- Estimated yield
+- Maturity date
 - Status

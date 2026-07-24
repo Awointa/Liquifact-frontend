@@ -279,6 +279,60 @@ export function clearFilterByKey(filters, clearKey) {
 }
 
 /**
+ * A toggle button that switches between "all invoices" and "watchlist only"
+ * views.  Composes with the existing search and filter predicates so that
+ * when watchlist-only is active, the current search + filter results are
+ * further narrowed to watched invoices.
+ *
+ * Renders with `aria-pressed` to communicate the toggle state.
+ *
+ * @param {object}  props
+ * @param {boolean} props.active - Whether watchlist-only mode is on.
+ * @param {Function} props.onToggle - Called with the next boolean value.
+ * @param {number}  [props.watchlistCount] - Number of watched invoices.
+ */
+export function WatchlistToggle({ active, onToggle, watchlistCount = 0 }) {
+  return (
+    <button
+      type="button"
+      aria-pressed={active}
+      onClick={() => onToggle(!active)}
+      className={[
+        "inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-all",
+        "focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 focus-visible:ring-offset-1 focus-visible:ring-offset-slate-950",
+        active
+          ? "border-amber-600/60 bg-amber-900/20 text-amber-300 hover:bg-amber-900/30"
+          : "border-slate-700 bg-slate-800/50 text-slate-400 hover:border-slate-500 hover:text-slate-300",
+      ].join(" ")}
+      aria-label={active ? "Show all invoices" : "Show watchlist only"}
+    >
+      {/* Star icon */}
+      <svg
+        aria-hidden="true"
+        width="14"
+        height="14"
+        viewBox="0 0 24 24"
+        fill={active ? "currentColor" : "none"}
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+      </svg>
+      <span>
+        {active ? "Watchlist" : "Watchlist"}
+        {watchlistCount > 0 && !active && (
+          <span className="ml-1 rounded-full bg-slate-700 px-1.5 py-0.5 text-[10px] tabular-nums text-slate-300">
+            {watchlistCount}
+          </span>
+        )}
+      </span>
+    </button>
+  );
+}
+
+/**
  * Visible results count and removable active-filter chips for the marketplace.
  */
 export function ActiveFilterSummary({
