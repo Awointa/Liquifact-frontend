@@ -12,8 +12,7 @@ const INVOICE_STATUSES = {
 };
 
 const STATUS_STYLES = {
-  [INVOICE_STATUSES.PENDING_TOKENIZATION]:
-    "bg-amber-500/10 text-amber-200 ring-1 ring-amber-400/20",
+  [INVOICE_STATUSES.PENDING_TOKENIZATION]: "bg-amber-500/10 text-amber-200 ring-1 ring-amber-400/20",
   [INVOICE_STATUSES.TOKENIZED]: "bg-cyan-500/10 text-cyan-200 ring-1 ring-cyan-400/20",
   [INVOICE_STATUSES.FUNDED]: "bg-emerald-500/10 text-emerald-200 ring-1 ring-emerald-400/20",
   [INVOICE_STATUSES.SETTLED]: "bg-slate-800/80 text-slate-200 ring-1 ring-slate-500/20",
