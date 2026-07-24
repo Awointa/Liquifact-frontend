@@ -37,7 +37,7 @@ describe("InvoiceList", () => {
   it("renders empty state when no invoices are provided", () => {
     render(<InvoiceList invoices={[]} />);
 
-    expect(screen.getByText(/No invoices yet/i)).toBeInTheDocument();
+    expect(screen.getByText("No invoices yet")).toBeInTheDocument(); // ← exact match, no regex
     expect(screen.getByText(/Upload your first invoice/i)).toBeInTheDocument();
   });
 
